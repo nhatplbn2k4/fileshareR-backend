@@ -1,0 +1,93 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/document_management}
+    username: ${DATABASE_USERNAME:admin}
+    password: ${DATABASE_PASSWORD:admin123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  # Mail Configuration
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: smtp.gmail.com
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  # Thymeleaf Configuration
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    cache: false
+
+server:
+  port: 8080
+
+# JWT Configuration
+filesharer:
+  jwt:
+    # Base64 encoded secret key (minimum 512 bits for HS512)
+    base64-secret: ${JWT_SECRET:Y2xhdWRlLWNvZGUtZmlsZXNoYXJlci1qd3Qtc2VjcmV0LWtleS0yMDI0LXZlcnktc2VjdXJlLWtleS1mb3ItaHM1MTItYWxnb3JpdGhtLW1pbmltdW0tNTEyLWJpdHM=}
+    # Access token validity: 24 hours
+    access-token-validity-in-seconds: 86400
+    # Refresh token validity: 100 days
+    refresh-token-validity-in-seconds: 8640000
+
+  # File Storage Configuration
+  file-storage:
+    upload-dir: ${FILE_UPLOAD_DIR:uploads}
+    allowed-extensions: pdf,docx,doc,txt
+    max-file-size: 52428800 # 50MB in bytes
+
+# Firebase Storage
+firebase:
+  storage:
+    bucket: filesharer-b8ff3
+
+# Gemini AI Configuration
+gemini:
+  api:
+    key: ${GEMINI_API_KEY:}
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    model: gemini-2.5-flash
+
+# Logging
+logging:
+  level:
+    com.example.fileshareR: DEBUG
+    org.springframework.security: DEBUG

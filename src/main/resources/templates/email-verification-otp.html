@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác thực Email - FileShareR</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffffff;
+            margin: 0;
+        }
+        .logo-icon {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            background-color: #ffffff;
+            border-radius: 50%;
+            line-height: 50px;
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 20px;
+            color: #333333;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            color: #666666;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .otp-container {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin: 30px 0;
+        }
+        .otp-label {
+            color: #ffffff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+        .otp-code {
+            font-size: 36px;
+            font-weight: bold;
+            color: #ffffff;
+            letter-spacing: 8px;
+            margin: 0;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: inline-block;
+        }
+        .expiry-notice {
+            background-color: #e0f2fe;
+            border-left: 4px solid #0284c7;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .expiry-notice p {
+            margin: 0;
+            color: #075985;
+            font-size: 14px;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .warning p {
+            margin: 0;
+            color: #92400e;
+            font-size: 14px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e9ecef;
+        }
+        .footer p {
+            margin: 5px 0;
+            color: #6c757d;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="logo-icon">📄</div>
+        <h1 class="logo">FileShareR</h1>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <h2 class="greeting">Xin chào <span th:text="${username}">Bạn</span>! 👋</h2>
+
+        <p class="message">
+            Cảm ơn bạn đã đăng ký tài khoản FileShareR! Để hoàn tất xác thực email, vui lòng sử dụng mã OTP dưới đây trong vòng 5 phút.
+        </p>
+
+        <!-- OTP Block -->
+        <div class="otp-container">
+            <p class="otp-label">Mã xác thực email</p>
+            <p class="otp-code" th:text="${otp}">123456</p>
+        </div>
+
+        <!-- Expiry Notice -->
+        <div class="expiry-notice">
+            <p>⏱️ <strong>Lưu ý:</strong> Mã OTP có hiệu lực trong <strong>5 phút</strong>. Nếu hết hạn, hãy yêu cầu gửi lại.</p>
+        </div>
+
+        <!-- Warning -->
+        <div class="warning">
+            <p>🔒 <strong>Bảo mật:</strong> Không chuyển tiếp email này cho người khác. FileShareR sẽ không bao giờ yêu cầu bạn cung cấp liên kết xác thực.</p>
+        </div>
+
+        <p class="message">
+            Nếu bạn không yêu cầu xác thực email này, vui lòng bỏ qua email này hoặc liên hệ với chúng tôi ngay lập tức.
+        </p>
+
+        <p class="message">
+            Trân trọng,<br>
+            <strong>Đội ngũ FileShareR</strong>
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>© 2024 FileShareR. Tất cả quyền được bảo lưu.</p>
+        <p>Email này được gửi tự động, vui lòng không trả lời.</p>
+    </div>
+</div>
+</body>
+</html>
