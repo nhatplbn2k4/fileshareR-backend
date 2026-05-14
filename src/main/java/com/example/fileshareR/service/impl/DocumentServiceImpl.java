@@ -17,15 +17,18 @@ import com.example.fileshareR.enums.FileType;
 import com.example.fileshareR.enums.FolderVisibilityType;
 import com.example.fileshareR.enums.GroupMemberRole;
 import com.example.fileshareR.enums.GroupVisibilityType;
+import com.example.fileshareR.enums.ModerationStatus;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.FolderRepository;
 import com.example.fileshareR.repository.GroupBanRepository;
 import com.example.fileshareR.repository.GroupFolderRepository;
 import com.example.fileshareR.repository.GroupMemberRepository;
 import com.example.fileshareR.repository.GroupRepository;
+import com.example.fileshareR.service.ContentModerationService;
 import com.example.fileshareR.service.DocumentService;
 import com.example.fileshareR.service.FileStorageService;
 import com.example.fileshareR.service.NlpService;
+import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.TextExtractionService;
 import com.example.fileshareR.service.UserService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -61,6 +64,8 @@ public class DocumentServiceImpl implements DocumentService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupBanRepository groupBanRepository;
     private final GroupFolderRepository groupFolderRepository;
+    private final StorageQuotaService storageQuotaService;
+    private final ContentModerationService contentModerationService;
 
     private static final int TOP_KEYWORDS_COUNT = 10;
     private static final int SUMMARY_MAX_WORDS = 50; // Tối đa 50 từ cho summary ngắn gọn
@@ -84,6 +89,9 @@ public class DocumentServiceImpl implements DocumentService {
                 throw new CustomException(ErrorCode.FOLDER_ACCESS_DENIED);
             }
         }
+
+        // Kiểm tra quota của user trước khi upload
+        storageQuotaService.ensureUserCanUpload(user, file.getSize());
 
         // Lưu file vào hệ thống
         String fileUrl = fileStorageService.storeFile(file, userId);
@@ -148,6 +156,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .build();
 
         document = documentRepository.save(document);
+        storageQuotaService.incrementUserUsage(user, fileSize);
         log.info("Document uploaded successfully with id: {}", document.getId());
 
         return mapToResponse(document);
@@ -265,11 +274,21 @@ public class DocumentServiceImpl implements DocumentService {
             throw new CustomException(ErrorCode.DOCUMENT_ACCESS_DENIED);
         }
 
+        long size = document.getFileSize() != null ? document.getFileSize() : 0L;
+        Group docGroup = document.getGroup();
+
         // Xóa file vật lý
         fileStorageService.deleteFile(document.getFileUrl());
 
         // Xóa document trong database
         documentRepository.delete(document);
+
+        // Cập nhật quota: trừ khỏi group nếu thuộc group, ngược lại trừ khỏi user
+        if (docGroup != null) {
+            storageQuotaService.decrementGroupUsage(docGroup, size);
+        } else {
+            storageQuotaService.decrementUserUsage(document.getUser(), size);
+        }
         log.info("Document deleted successfully: {}", documentId);
     }
 
@@ -317,6 +336,48 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional(readOnly = true)
+    public Resource previewDocument(Long documentId, Long userId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+
+        boolean isOwner = userId != null && document.getUser().getId().equals(userId);
+        boolean isDocPublic = document.getVisibility() == com.example.fileshareR.enums.VisibilityType.PUBLIC;
+        boolean isInPublicFolder = document.getFolder() != null
+                && document.getFolder().getVisibility() == FolderVisibilityType.PUBLIC;
+
+        // Group docs: member nào cũng xem được
+        boolean isGroupMember = false;
+        if (document.getGroup() != null && userId != null) {
+            isGroupMember = groupMemberRepository.existsByGroupIdAndUserId(document.getGroup().getId(), userId);
+        }
+        boolean isGroupPublic = document.getGroup() != null
+                && document.getGroup().getVisibility() == GroupVisibilityType.PUBLIC;
+
+        if (!isOwner && !isDocPublic && !isInPublicFolder && !isGroupMember && !isGroupPublic) {
+            throw new CustomException(ErrorCode.DOCUMENT_ACCESS_DENIED);
+        }
+
+        // Tài liệu nhóm PENDING/REJECTED: chỉ chính chủ + admin/owner nhóm preview được
+        if (document.getGroup() != null
+                && document.getModerationStatus() != ModerationStatus.APPROVED) {
+            boolean isAdminOrOwner = userId != null && isGroupAdminOrOwner(document.getGroup().getId(), userId);
+            if (!isOwner && !isAdminOrOwner) {
+                throw new CustomException(ErrorCode.DOCUMENT_ACCESS_DENIED);
+            }
+        }
+
+        try {
+            Path filePath = fileStorageService.getFilePath(document.getFileUrl());
+            Resource resource = new UrlResource(filePath.toUri());
+            if (resource.exists() && resource.isReadable()) return resource;
+            throw new CustomException(ErrorCode.DOCUMENT_NOT_FOUND);
+        } catch (MalformedURLException e) {
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<DocumentResponse> searchDocuments(String keyword, Long userId) {
         log.info("Searching documents with keyword '{}' for user {}", keyword, userId);
 
@@ -354,6 +415,8 @@ public class DocumentServiceImpl implements DocumentService {
                 .folderName(document.getFolder() != null ? document.getFolder().getName() : null)
                 .groupId(document.getGroup() != null ? document.getGroup().getId() : null)
                 .groupName(document.getGroup() != null ? document.getGroup().getName() : null)
+                .moderationStatus(document.getModerationStatus())
+                .moderationReason(document.getModerationReason())
                 .createdAt(document.getCreatedAt())
                 .updatedAt(document.getUpdatedAt())
                 .build();
@@ -554,9 +617,10 @@ public class DocumentServiceImpl implements DocumentService {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new CustomException(ErrorCode.GROUP_NOT_FOUND));
 
-        // Kiểm tra user là thành viên
-        groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
-                .orElseThrow(() -> new CustomException(ErrorCode.GROUP_ACCESS_DENIED));
+        // Kiểm tra user là thành viên + lưu lại role để dùng cho moderation
+        GroupMemberRole uploaderRole = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.GROUP_ACCESS_DENIED))
+                .getRole();
 
         // Kiểm tra ban upload còn hiệu lực
         groupBanRepository.findActiveUploadBan(groupId, userId, LocalDateTime.now())
@@ -576,6 +640,9 @@ public class DocumentServiceImpl implements DocumentService {
                 throw new CustomException(ErrorCode.GROUP_FOLDER_NOT_FOUND);
             }
         }
+
+        // Kiểm tra quota của group trước khi upload
+        storageQuotaService.ensureGroupCanUpload(group, file.getSize());
 
         // Lưu file, trích xuất text, NLP
         String fileUrl = fileStorageService.storeFile(file, userId);
@@ -607,6 +674,23 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
+        // ── Moderation: chỉ áp dụng cho MEMBER thường (OWNER/ADMIN tin tưởng) ────
+        ModerationStatus moderationStatus = ModerationStatus.APPROVED;
+        String moderationReason = null;
+        Double moderationScore = null;
+        LocalDateTime moderatedAt = null;
+        if (uploaderRole == GroupMemberRole.MEMBER) {
+            ContentModerationService.ModerationResult mr =
+                    contentModerationService.moderate(extractedText);
+            if (mr.getStatus() != ModerationStatus.APPROVED) {
+                moderationStatus = ModerationStatus.PENDING;
+                moderationReason = mr.getReason();
+                moderationScore = mr.getScore();
+                moderatedAt = LocalDateTime.now();
+                log.info("Group document flagged PENDING: {}", moderationReason);
+            }
+        }
+
         Document document = Document.builder()
                 .title(request.getTitle())
                 .fileName(originalFilename)
@@ -622,10 +706,16 @@ public class DocumentServiceImpl implements DocumentService {
                 .group(group)
                 .groupFolder(groupFolder)
                 .downloadCount(0)
+                .moderationStatus(moderationStatus)
+                .moderationReason(moderationReason)
+                .moderationScore(moderationScore)
+                .moderatedAt(moderatedAt)
                 .build();
 
         document = documentRepository.save(document);
-        log.info("Group document {} saved to group {}", document.getId(), groupId);
+        storageQuotaService.incrementGroupUsage(group, fileSize);
+        log.info("Group document {} saved to group {} (status={})",
+                document.getId(), groupId, moderationStatus);
         return mapToResponse(document);
     }
 
@@ -653,7 +743,25 @@ public class DocumentServiceImpl implements DocumentService {
             docs = documentRepository.findByGroupIdAndGroupFolderId(groupId, folderId);
         }
 
+        // Moderation visibility: admin/owner thấy tất cả; member thường chỉ thấy
+        // APPROVED + tài liệu của chính họ (kể cả PENDING/REJECTED — để biết file
+        // của mình đang ở trạng thái nào). Guest/non-member chỉ thấy APPROVED.
+        boolean isAdminOrOwner = requesterId != null && isGroupAdminOrOwner(groupId, requesterId);
+        if (!isAdminOrOwner) {
+            final Long uid = requesterId;
+            docs = docs.stream()
+                    .filter(d -> d.getModerationStatus() == ModerationStatus.APPROVED
+                            || (uid != null && d.getUser().getId().equals(uid)))
+                    .collect(Collectors.toList());
+        }
+
         return docs.stream().map(this::mapToResponse).collect(Collectors.toList());
+    }
+
+    private boolean isGroupAdminOrOwner(Long groupId, Long userId) {
+        return groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(m -> m.getRole() == GroupMemberRole.OWNER || m.getRole() == GroupMemberRole.ADMIN)
+                .orElse(false);
     }
 
     @Override
@@ -673,6 +781,15 @@ public class DocumentServiceImpl implements DocumentService {
 
         if (!document.getGroup().getId().equals(groupId)) {
             throw new CustomException(ErrorCode.GROUP_DOCUMENT_NOT_FOUND);
+        }
+
+        // Tài liệu PENDING/REJECTED: chỉ chính chủ + admin/owner nhóm download được
+        if (document.getModerationStatus() != ModerationStatus.APPROVED) {
+            boolean isDocOwner = requesterId != null && document.getUser().getId().equals(requesterId);
+            boolean isAdminOrOwner = requesterId != null && isGroupAdminOrOwner(groupId, requesterId);
+            if (!isDocOwner && !isAdminOrOwner) {
+                throw new CustomException(ErrorCode.GROUP_DOCUMENT_NOT_FOUND);
+            }
         }
 
         document.setDownloadCount(document.getDownloadCount() + 1);
@@ -714,8 +831,14 @@ public class DocumentServiceImpl implements DocumentService {
             throw new CustomException(ErrorCode.DOCUMENT_ACCESS_DENIED);
         }
 
+        long size = document.getFileSize() != null ? document.getFileSize() : 0L;
+        Group docGroup = document.getGroup();
+
         fileStorageService.deleteFile(document.getFileUrl());
         documentRepository.delete(document);
+        if (docGroup != null) {
+            storageQuotaService.decrementGroupUsage(docGroup, size);
+        }
         log.info("Group document {} deleted from group {}", documentId, groupId);
     }
 
@@ -750,6 +873,9 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
+        long copySize = source.getFileSize() != null ? source.getFileSize() : 0L;
+        storageQuotaService.ensureUserCanUpload(user, copySize);
+
         // Tăng download count cho document gốc
         source.setDownloadCount(source.getDownloadCount() + 1);
         documentRepository.save(source);
@@ -771,7 +897,89 @@ public class DocumentServiceImpl implements DocumentService {
                 .build();
 
         copy = documentRepository.save(copy);
+        storageQuotaService.incrementUserUsage(user, copySize);
         log.info("Document {} saved as copy {} in folder {}", documentId, copy.getId(), targetFolderId);
         return mapToResponse(copy);
+    }
+
+    // ── Moderation ────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DocumentResponse> getPendingGroupDocuments(Long groupId, Long requesterId) {
+        groupRepository.findById(groupId)
+                .orElseThrow(() -> new CustomException(ErrorCode.GROUP_NOT_FOUND));
+        requireGroupAdminOrOwner(groupId, requesterId);
+
+        return documentRepository
+                .findByGroupIdAndModerationStatusOrderByCreatedAtDesc(groupId, ModerationStatus.PENDING)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingGroupDocuments(Long groupId, Long requesterId) {
+        groupRepository.findById(groupId)
+                .orElseThrow(() -> new CustomException(ErrorCode.GROUP_NOT_FOUND));
+        requireGroupAdminOrOwner(groupId, requesterId);
+        return documentRepository.countByGroupIdAndModerationStatus(groupId, ModerationStatus.PENDING);
+    }
+
+    @Override
+    public DocumentResponse approveDocument(Long documentId, Long requesterId) {
+        log.info("User {} approving document {}", requesterId, documentId);
+        Document doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.GROUP_DOCUMENT_NOT_FOUND));
+        if (doc.getGroup() == null) {
+            throw new CustomException(ErrorCode.MODERATION_NOT_GROUP_DOCUMENT);
+        }
+        requireGroupAdminOrOwner(doc.getGroup().getId(), requesterId);
+        if (doc.getModerationStatus() == ModerationStatus.APPROVED) {
+            throw new CustomException(ErrorCode.MODERATION_NOT_PENDING);
+        }
+
+        User reviewer = userService.getUserById(requesterId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        doc.setModerationStatus(ModerationStatus.APPROVED);
+        doc.setModerationReason(null);
+        doc.setModeratedBy(reviewer);
+        doc.setModeratedAt(LocalDateTime.now());
+        doc = documentRepository.save(doc);
+        return mapToResponse(doc);
+    }
+
+    @Override
+    public DocumentResponse rejectDocument(Long documentId, String reason, Long requesterId) {
+        log.info("User {} rejecting document {} with reason '{}'", requesterId, documentId, reason);
+        Document doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.GROUP_DOCUMENT_NOT_FOUND));
+        if (doc.getGroup() == null) {
+            throw new CustomException(ErrorCode.MODERATION_NOT_GROUP_DOCUMENT);
+        }
+        requireGroupAdminOrOwner(doc.getGroup().getId(), requesterId);
+        if (doc.getModerationStatus() == ModerationStatus.REJECTED) {
+            throw new CustomException(ErrorCode.MODERATION_NOT_PENDING);
+        }
+
+        User reviewer = userService.getUserById(requesterId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        doc.setModerationStatus(ModerationStatus.REJECTED);
+        if (reason != null && !reason.isBlank()) {
+            doc.setModerationReason(reason);
+        }
+        doc.setModeratedBy(reviewer);
+        doc.setModeratedAt(LocalDateTime.now());
+        doc = documentRepository.save(doc);
+        return mapToResponse(doc);
+    }
+
+    private void requireGroupAdminOrOwner(Long groupId, Long userId) {
+        if (userId == null || !isGroupAdminOrOwner(groupId, userId)) {
+            throw new CustomException(ErrorCode.MODERATION_PERMISSION_DENIED);
+        }
     }
 }

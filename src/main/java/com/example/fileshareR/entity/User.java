@@ -51,4 +51,16 @@ public class User extends BaseEntity {
 
     @Column(name = "provider_id")
     private String providerId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_id")
+    private Plan plan;
+
+    @Column(name = "bonus_storage_bytes", nullable = false, columnDefinition = "bigint not null default 0")
+    @Builder.Default
+    private Long bonusStorageBytes = 0L;
+
+    @Column(name = "storage_used", nullable = false, columnDefinition = "bigint not null default 0")
+    @Builder.Default
+    private Long storageUsed = 0L;
 }

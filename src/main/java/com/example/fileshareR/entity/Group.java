@@ -43,4 +43,16 @@ public class Group extends BaseEntity {
 
     @Column(name = "join_question", columnDefinition = "TEXT")
     private String joinQuestion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_id")
+    private Plan plan;
+
+    @Column(name = "bonus_storage_bytes", nullable = false, columnDefinition = "bigint not null default 0")
+    @Builder.Default
+    private Long bonusStorageBytes = 0L;
+
+    @Column(name = "storage_used", nullable = false, columnDefinition = "bigint not null default 0")
+    @Builder.Default
+    private Long storageUsed = 0L;
 }

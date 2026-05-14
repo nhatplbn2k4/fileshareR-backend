@@ -8,8 +8,10 @@ import com.example.fileshareR.dto.response.FolderResponse;
 import com.example.fileshareR.entity.Folder;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.FolderVisibilityType;
+import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.FolderRepository;
 import com.example.fileshareR.service.FolderService;
+import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,8 @@ public class FolderServiceImpl implements FolderService {
 
     private final FolderRepository folderRepository;
     private final UserService userService;
+    private final DocumentRepository documentRepository;
+    private final StorageQuotaService storageQuotaService;
 
     @Override
     public FolderResponse createFolder(CreateFolderRequest request, Long userId) {
@@ -184,8 +188,16 @@ public class FolderServiceImpl implements FolderService {
             throw new CustomException(ErrorCode.FOLDER_ACCESS_DENIED);
         }
 
+        // Tính tổng dung lượng cần trả lại quota trước khi cascade delete
+        Long freed = documentRepository.sumFileSizeInFolderTree(folderId);
+        long freedBytes = freed != null ? freed : 0L;
+
         folderRepository.delete(folder);
-        log.info("Folder deleted successfully: {}", folderId);
+
+        if (freedBytes > 0) {
+            storageQuotaService.decrementUserUsage(folder.getUser(), freedBytes);
+        }
+        log.info("Folder deleted successfully: {} (freed {} bytes)", folderId, freedBytes);
     }
 
     @Override

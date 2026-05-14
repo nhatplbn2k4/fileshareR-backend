@@ -36,6 +36,9 @@ public interface DocumentService {
     /** Download document (cá nhân) */
     Resource downloadDocument(Long documentId, Long userId);
 
+    /** Preview document inline (cùng permission download, không tăng download_count) */
+    Resource previewDocument(Long documentId, Long userId);
+
     /** Tìm kiếm document theo keyword */
     List<DocumentResponse> searchDocuments(String keyword, Long userId);
 
@@ -71,4 +74,18 @@ public interface DocumentService {
 
     /** Lưu bản sao tài liệu vào folder của user hiện tại */
     DocumentResponse saveDocumentToFolder(Long documentId, Long targetFolderId, Long userId);
+
+    // ── Moderation (chỉ áp dụng cho tài liệu nhóm) ───────────────────────────
+
+    /** Danh sách tài liệu PENDING trong nhóm (admin/owner only) */
+    List<DocumentResponse> getPendingGroupDocuments(Long groupId, Long requesterId);
+
+    /** Đếm số tài liệu PENDING (admin/owner only) — dùng cho badge */
+    long countPendingGroupDocuments(Long groupId, Long requesterId);
+
+    /** Duyệt tài liệu PENDING (admin/owner only) */
+    DocumentResponse approveDocument(Long documentId, Long requesterId);
+
+    /** Từ chối tài liệu PENDING (admin/owner only). Tài liệu vẫn được giữ trong DB nhưng ẩn với non-admin. */
+    DocumentResponse rejectDocument(Long documentId, String reason, Long requesterId);
 }

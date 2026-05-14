@@ -9,10 +9,12 @@ import com.example.fileshareR.entity.GroupFolder;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.GroupMemberRole;
 import com.example.fileshareR.enums.GroupVisibilityType;
+import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupFolderRepository;
 import com.example.fileshareR.repository.GroupMemberRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.service.GroupFolderService;
+import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,8 @@ public class GroupFolderServiceImpl implements GroupFolderService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final UserService userService;
+    private final DocumentRepository documentRepository;
+    private final StorageQuotaService storageQuotaService;
 
     @Override
     public GroupFolderResponse createFolder(Long groupId, CreateGroupFolderRequest request, Long userId) {
@@ -111,8 +115,15 @@ public class GroupFolderServiceImpl implements GroupFolderService {
             throw new CustomException(ErrorCode.GROUP_FOLDER_NOT_FOUND);
         }
 
+        Long freed = documentRepository.sumFileSizeInGroupFolderTree(folderId);
+        long freedBytes = freed != null ? freed : 0L;
+
         groupFolderRepository.delete(folder);
-        log.info("GroupFolder {} deleted from group {}", folderId, groupId);
+
+        if (freedBytes > 0) {
+            storageQuotaService.decrementGroupUsage(folder.getGroup(), freedBytes);
+        }
+        log.info("GroupFolder {} deleted from group {} (freed {} bytes)", folderId, groupId, freedBytes);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

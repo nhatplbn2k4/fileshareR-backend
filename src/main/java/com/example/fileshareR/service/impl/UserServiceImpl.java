@@ -5,6 +5,7 @@ import com.example.fileshareR.common.exception.ErrorCode;
 import com.example.fileshareR.dto.request.RegisterRequest;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.UserRole;
+import com.example.fileshareR.repository.PlanRepository;
 import com.example.fileshareR.repository.UserRepository;
 import com.example.fileshareR.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PlanRepository planRepository;
 
     @Override
     public String createUser(RegisterRequest request) {
@@ -38,6 +40,7 @@ public class UserServiceImpl implements UserService {
                 .fullName(request.getFullName())
                 .role(UserRole.USER)
                 .isActive(true)
+                .plan(planRepository.findByCode("FREE").orElse(null))
                 .build();
 
         userRepository.save(user);
