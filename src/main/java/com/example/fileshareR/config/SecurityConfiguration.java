@@ -60,6 +60,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/folders/shared/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/*/profile", "/api/users/*/documents", "/api/users/*/folders").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/public-download").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/documents/*/preview").permitAll()
 
                         // Admin endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

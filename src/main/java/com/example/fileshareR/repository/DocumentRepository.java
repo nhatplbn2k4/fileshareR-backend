@@ -1,6 +1,7 @@
 package com.example.fileshareR.repository;
 
 import com.example.fileshareR.entity.Document;
+import com.example.fileshareR.enums.ModerationStatus;
 import com.example.fileshareR.enums.VisibilityType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -73,4 +74,34 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     /** Tài liệu nhóm không thuộc folder nào */
     @Query("SELECT d FROM Document d WHERE d.group.id = :groupId AND d.groupFolder IS NULL")
     List<Document> findByGroupIdAndGroupFolderIsNull(@Param("groupId") Long groupId);
+
+    /** Tài liệu nhóm theo moderation status (cho tab "Chờ duyệt") */
+    List<Document> findByGroupIdAndModerationStatusOrderByCreatedAtDesc(Long groupId, ModerationStatus status);
+
+    /** Đếm số tài liệu PENDING của nhóm (cho badge ở tab) */
+    long countByGroupIdAndModerationStatus(Long groupId, ModerationStatus status);
+
+    /** Tổng dung lượng (bytes) của tất cả tài liệu trong folder (đệ quy mọi sub-folder) */
+    @Query(value =
+        "WITH RECURSIVE folder_tree AS ( " +
+        "  SELECT id FROM folders WHERE id = :folderId " +
+        "  UNION ALL " +
+        "  SELECT f.id FROM folders f JOIN folder_tree ft ON f.parent_id = ft.id " +
+        ") " +
+        "SELECT COALESCE(SUM(d.file_size), 0) FROM documents d " +
+        " WHERE d.folder_id IN (SELECT id FROM folder_tree)",
+        nativeQuery = true)
+    Long sumFileSizeInFolderTree(@Param("folderId") Long folderId);
+
+    /** Tổng dung lượng (bytes) của tất cả tài liệu trong group folder (đệ quy) */
+    @Query(value =
+        "WITH RECURSIVE folder_tree AS ( " +
+        "  SELECT id FROM group_folders WHERE id = :folderId " +
+        "  UNION ALL " +
+        "  SELECT gf.id FROM group_folders gf JOIN folder_tree ft ON gf.parent_id = ft.id " +
+        ") " +
+        "SELECT COALESCE(SUM(d.file_size), 0) FROM documents d " +
+        " WHERE d.group_folder_id IN (SELECT id FROM folder_tree)",
+        nativeQuery = true)
+    Long sumFileSizeInGroupFolderTree(@Param("folderId") Long folderId);
 }

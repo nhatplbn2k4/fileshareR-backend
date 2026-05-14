@@ -47,3 +47,4 @@ uploads/
 
 ### Firebase service account (secret) ###
 src/main/resources/*firebase*.json
+src/main/resources/moderation/blacklist.txt

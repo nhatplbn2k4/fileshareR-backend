@@ -10,6 +10,7 @@ import com.example.fileshareR.dto.response.AuthResponse;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.AuthProvider;
 import com.example.fileshareR.enums.UserRole;
+import com.example.fileshareR.repository.PlanRepository;
 import com.example.fileshareR.service.AuthService;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseToken;
@@ -40,6 +41,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserService userService;
     private final TokenBlacklistService tokenBlacklistService;
     private final OtpService otpService;
+    private final PlanRepository planRepository;
 
     @Override
     public String register(RegisterRequest request) {
@@ -276,6 +278,7 @@ public class AuthServiceImpl implements AuthService {
                         .emailVerified(true) // Email từ Google/Facebook đã được xác thực
                         .authProvider(provider)
                         .providerId(uid)
+                        .plan(planRepository.findByCode("FREE").orElse(null))
                         .build();
                 user = userService.updateUser(user);
                 log.info("Created new user from Firebase: {} ({})", email, provider);

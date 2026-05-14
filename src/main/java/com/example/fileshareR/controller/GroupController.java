@@ -504,6 +504,58 @@ public class GroupController {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Moderation: chỉ ADMIN/OWNER nhóm mới truy cập được
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Danh sách tài liệu đang chờ duyệt trong nhóm.
+     * GET /api/groups/{id}/documents/pending
+     */
+    @GetMapping("/{groupId}/documents/pending")
+    public ResponseEntity<List<DocumentResponse>> getPendingGroupDocuments(@PathVariable Long groupId) {
+        Long userId = getCurrentUserId();
+        return ResponseEntity.ok(documentService.getPendingGroupDocuments(groupId, userId));
+    }
+
+    /**
+     * Số lượng tài liệu đang chờ duyệt (cho badge).
+     * GET /api/groups/{id}/documents/pending/count
+     */
+    @GetMapping("/{groupId}/documents/pending/count")
+    public ResponseEntity<java.util.Map<String, Long>> countPendingGroupDocuments(@PathVariable Long groupId) {
+        Long userId = getCurrentUserId();
+        long count = documentService.countPendingGroupDocuments(groupId, userId);
+        return ResponseEntity.ok(java.util.Map.of("count", count));
+    }
+
+    /**
+     * Duyệt một tài liệu đang chờ.
+     * POST /api/groups/{id}/documents/{did}/approve
+     */
+    @PostMapping("/{groupId}/documents/{documentId}/approve")
+    public ResponseEntity<DocumentResponse> approveGroupDocument(
+            @PathVariable Long groupId,
+            @PathVariable Long documentId) {
+        Long userId = getCurrentUserId();
+        // groupId không cần truyền vào service (đã derive từ document) nhưng giữ trong URL cho REST-friendly
+        return ResponseEntity.ok(documentService.approveDocument(documentId, userId));
+    }
+
+    /**
+     * Từ chối một tài liệu. Body: { "reason": "..." } (optional)
+     * POST /api/groups/{id}/documents/{did}/reject
+     */
+    @PostMapping("/{groupId}/documents/{documentId}/reject")
+    public ResponseEntity<DocumentResponse> rejectGroupDocument(
+            @PathVariable Long groupId,
+            @PathVariable Long documentId,
+            @RequestBody(required = false) java.util.Map<String, String> body) {
+        Long userId = getCurrentUserId();
+        String reason = body != null ? body.get("reason") : null;
+        return ResponseEntity.ok(documentService.rejectDocument(documentId, reason, userId));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 

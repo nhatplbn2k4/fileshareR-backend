@@ -52,6 +52,10 @@ public class GroupServiceImpl implements GroupService {
     private final UserService userService;
     private final GroupFolderService groupFolderService;
     private final ObjectMapper objectMapper;
+    private final com.example.fileshareR.repository.DocumentRepository documentRepository;
+    private final com.example.fileshareR.repository.GroupFolderRepository groupFolderRepository;
+    private final com.example.fileshareR.service.FileStorageService fileStorageService;
+    private final com.example.fileshareR.repository.PlanRepository planRepository;
 
     // ─────────────────────────────────────────────────────────────────────────
     // CRUD Nhóm
@@ -69,6 +73,7 @@ public class GroupServiceImpl implements GroupService {
                 .visibility(request.getVisibility() != null ? request.getVisibility() : GroupVisibilityType.PRIVATE)
                 .owner(owner)
                 .shareToken(UUID.randomUUID().toString())
+                .plan(planRepository.findByCode("FREE").orElse(null))
                 .build();
         group = groupRepository.save(group);
 
@@ -132,14 +137,29 @@ public class GroupServiceImpl implements GroupService {
         Group group = getGroupEntityById(groupId);
         requireOwner(group, userId);
 
-        // Xóa tất cả bans, members → Hibernate cascade hoặc xóa thủ công
+        // Xóa tất cả dữ liệu liên quan theo thứ tự FK dependency
+        // 1. Documents thuộc group
+        documentRepository.findByGroupId(groupId)
+                .forEach(doc -> {
+                    try { fileStorageService.deleteFile(doc.getFileUrl()); } catch (Exception e) { /* ignore */ }
+                    documentRepository.delete(doc);
+                });
+        // 2. Group folders
+        groupFolderRepository.findByGroupId(groupId)
+                .forEach(groupFolderRepository::delete);
+        // 3. Join requests
+        joinRequestRepository.findByGroupIdAndStatus(groupId, JoinRequestStatus.PENDING)
+                .forEach(joinRequestRepository::delete);
+        // 4. Bans
         groupBanRepository.findByGroupIdAndActiveTrue(groupId)
                 .forEach(ban -> {
                     ban.setActive(false);
                     groupBanRepository.save(ban);
                 });
+        // 5. Members
         groupMemberRepository.findByGroupId(groupId)
                 .forEach(groupMemberRepository::delete);
+        // 6. Group
         groupRepository.delete(group);
 
         log.info("Group {} deleted by user {}", groupId, userId);

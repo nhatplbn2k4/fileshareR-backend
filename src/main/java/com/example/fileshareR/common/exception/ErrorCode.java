@@ -60,7 +60,24 @@ public enum ErrorCode {
     GROUP_ALREADY_MEMBER(8010, "Bạn đã là thành viên của nhóm", HttpStatus.BAD_REQUEST),
     GROUP_JOIN_NOT_ALLOWED(8011, "Không thể tham gia nhóm riêng tư", HttpStatus.FORBIDDEN),
     GROUP_JOIN_REQUEST_PENDING(8012, "Bạn đã gửi yêu cầu tham gia, vui lòng chờ duyệt", HttpStatus.BAD_REQUEST),
-    GROUP_JOIN_REQUEST_NOT_FOUND(8013, "Không tìm thấy yêu cầu tham gia", HttpStatus.NOT_FOUND);
+    GROUP_JOIN_REQUEST_NOT_FOUND(8013, "Không tìm thấy yêu cầu tham gia", HttpStatus.NOT_FOUND),
+
+    // Storage quota errors
+    USER_STORAGE_QUOTA_EXCEEDED(9001, "Vượt quá dung lượng lưu trữ của bạn. Vui lòng nâng cấp gói hoặc mua thêm bộ nhớ.", HttpStatus.BAD_REQUEST),
+    GROUP_STORAGE_QUOTA_EXCEEDED(9002, "Vượt quá dung lượng lưu trữ của nhóm. Chủ nhóm cần nâng cấp gói hoặc mua thêm bộ nhớ.", HttpStatus.BAD_REQUEST),
+    PLAN_NOT_FOUND(9003, "Không tìm thấy gói lưu trữ", HttpStatus.NOT_FOUND),
+    ADDON_NOT_FOUND(9004, "Không tìm thấy gói mua thêm", HttpStatus.NOT_FOUND),
+
+    // Convert errors
+    CONVERT_PDF_ONLY(9101, "Chỉ hỗ trợ chuyển đổi từ file PDF", HttpStatus.BAD_REQUEST),
+    CONVERT_FAILED(9102, "Chuyển đổi tài liệu thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
+    CONVERT_CREDITS_EXCEEDED(9103, "Dịch vụ CloudConvert đã hết hạn mức tháng này. Hệ thống sẽ tạm dùng engine cơ bản, vui lòng thử lại.", HttpStatus.SERVICE_UNAVAILABLE),
+    CONVERT_AUTH_FAILED(9104, "Xác thực với dịch vụ CloudConvert thất bại", HttpStatus.SERVICE_UNAVAILABLE),
+
+    // Moderation errors
+    MODERATION_NOT_PENDING(9201, "Tài liệu này không ở trạng thái chờ duyệt", HttpStatus.BAD_REQUEST),
+    MODERATION_PERMISSION_DENIED(9202, "Chỉ admin hoặc chủ nhóm mới được duyệt tài liệu", HttpStatus.FORBIDDEN),
+    MODERATION_NOT_GROUP_DOCUMENT(9203, "Chỉ tài liệu trong nhóm mới có trạng thái kiểm duyệt", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;

@@ -135,6 +135,33 @@ public class DocumentController {
     }
 
     /**
+     * Preview document inline — không tăng download_count.
+     * GET /api/documents/{documentId}/preview
+     */
+    @GetMapping("/{documentId}/preview")
+    public ResponseEntity<Resource> previewDocument(@PathVariable Long documentId) {
+        Long userId;
+        try { userId = getCurrentUserId(); } catch (CustomException ignored) { userId = null; }
+        Resource resource = documentService.previewDocument(documentId, userId);
+        String filename = resource.getFilename();
+        return ResponseEntity.ok()
+                .contentType(detectMediaType(filename))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                .body(resource);
+    }
+
+    private MediaType detectMediaType(String filename) {
+        if (filename == null) return MediaType.APPLICATION_OCTET_STREAM;
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".pdf")) return MediaType.APPLICATION_PDF;
+        if (lower.endsWith(".docx")) return MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        if (lower.endsWith(".doc")) return MediaType.parseMediaType("application/msword");
+        if (lower.endsWith(".txt")) return MediaType.TEXT_PLAIN;
+        return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    /**
      * Tìm kiếm document
      */
     @GetMapping("/search")

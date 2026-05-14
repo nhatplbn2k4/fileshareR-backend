@@ -1,6 +1,7 @@
 package com.example.fileshareR.dto.response;
 
 import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.ModerationStatus;
 import com.example.fileshareR.enums.VisibilityType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,6 +38,10 @@ public class DocumentResponse {
     // Group info (null nếu không thuộc nhóm)
     private Long groupId;
     private String groupName;
+
+    // Moderation (chỉ relevant cho tài liệu nhóm; tài liệu cá nhân luôn APPROVED)
+    private ModerationStatus moderationStatus;
+    private String moderationReason;
 
     // Timestamps
     private LocalDateTime createdAt;

@@ -1,9 +1,12 @@
 package com.example.fileshareR.entity;
 
 import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.ModerationStatus;
 import com.example.fileshareR.enums.VisibilityType;
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "documents")
@@ -71,4 +74,26 @@ public class Document extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_folder_id")
     private GroupFolder groupFolder;
+
+    // ── Moderation fields ─────────────────────────────────────────────────────
+    // Mặc định APPROVED cho mọi tài liệu cá nhân + tài liệu của OWNER/ADMIN nhóm.
+    // Chỉ tài liệu của thành viên thường bị nghi vấn mới có status PENDING / REJECTED.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 20,
+            columnDefinition = "varchar(20) not null default 'APPROVED'")
+    @Builder.Default
+    private ModerationStatus moderationStatus = ModerationStatus.APPROVED;
+
+    @Column(name = "moderation_reason", columnDefinition = "TEXT")
+    private String moderationReason;
+
+    @Column(name = "moderation_score")
+    private Double moderationScore;
+
+    @Column(name = "moderated_at")
+    private LocalDateTime moderatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "moderated_by_id")
+    private User moderatedBy;
 }

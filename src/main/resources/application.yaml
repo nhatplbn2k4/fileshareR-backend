@@ -79,12 +79,29 @@ firebase:
   storage:
     bucket: filesharer-b8ff3
 
+# CloudConvert (PDF→DOCX for PREMIUM users) — set CLOUDCONVERT_API_KEY in .env
+cloudconvert:
+  api-key: ${CLOUDCONVERT_API_KEY:}
+  api-url: https://api.cloudconvert.com/v2
+
 # Gemini AI Configuration
 gemini:
   api:
     key: ${GEMINI_API_KEY:}
     url: https://generativelanguage.googleapis.com/v1beta/models
     model: gemini-2.5-flash
+
+# OpenAI Moderation (kiểm duyệt nội dung tài liệu nhóm)
+# Để trống api-key → engine chỉ chạy keyword blacklist, bỏ qua tầng AI.
+openai:
+  moderation:
+    api-key: ${OPENAI_API_KEY:}
+    api-url: https://api.openai.com/v1/moderations
+    model: omni-moderation-latest
+    # Ngưỡng score (0-1) để flag PENDING. Score cao hơn → nghiêm khắc hơn.
+    threshold: 0.5
+    # Số ký tự text tối đa gửi lên OpenAI (cắt đầu file). 0 = không giới hạn.
+    max-chars: 8000
 
 # Logging
 logging:
