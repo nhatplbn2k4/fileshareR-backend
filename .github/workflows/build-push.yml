@@ -1,0 +1,60 @@
+name: Build and push to Docker Hub
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - 'Dockerfile'
+      - 'lombok.config'
+      - '.mvn/**'
+      - 'mvnw'
+      - '.github/workflows/build-push.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-push-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # 3 tags:
+          #   latest      → Watchtower trên VM auto-pull
+          #   sha-<short> → traceability (rollback về commit cụ thể)
+          #   <branch>    → optional branch-tracking
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/fileshare-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/fileshare-backend:sha-${{ steps.sha.outputs.short }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/fileshare-backend:${{ github.ref_name }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/fileshare-backend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/fileshare-backend:buildcache,mode=max
+
+      - name: Image digest
+        run: echo "Image pushed - Watchtower will pick up :latest within 5 minutes"
