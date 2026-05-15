@@ -103,6 +103,31 @@ openai:
     # Số ký tự text tối đa gửi lên OpenAI (cắt đầu file). 0 = không giới hạn.
     max-chars: 8000
 
+# Payment Gateway Configuration
+# VNPay: https://sandbox.vnpayment.vn — đăng ký merchant để lấy tmn-code + hash-secret
+# MoMo:  https://business.momo.vn — đăng ký để lấy partner-code + access-key + secret-key
+payment:
+  frontend-return-url: ${PAYMENT_FRONTEND_RETURN_URL:http://localhost:3000/payment/result}
+  vnpay:
+    tmn-code: ${VNPAY_TMN_CODE:}
+    hash-secret: ${VNPAY_HASH_SECRET:}
+    pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+    return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/payments/vnpay/return}
+    version: 2.1.0
+    command: pay
+    curr-code: VND
+    locale: vn
+    expire-minutes: 15
+  momo:
+    partner-code: ${MOMO_PARTNER_CODE:}
+    access-key: ${MOMO_ACCESS_KEY:}
+    secret-key: ${MOMO_SECRET_KEY:}
+    endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn/v2/gateway/api/create}
+    return-url: ${MOMO_RETURN_URL:http://localhost:8080/api/payments/momo/return}
+    ipn-url: ${MOMO_IPN_URL:http://localhost:8080/api/payments/momo/ipn}
+    request-type: captureWallet
+    lang: vi
+
 # Logging
 logging:
   level:

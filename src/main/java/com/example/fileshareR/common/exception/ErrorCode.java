@@ -77,7 +77,18 @@ public enum ErrorCode {
     // Moderation errors
     MODERATION_NOT_PENDING(9201, "Tài liệu này không ở trạng thái chờ duyệt", HttpStatus.BAD_REQUEST),
     MODERATION_PERMISSION_DENIED(9202, "Chỉ admin hoặc chủ nhóm mới được duyệt tài liệu", HttpStatus.FORBIDDEN),
-    MODERATION_NOT_GROUP_DOCUMENT(9203, "Chỉ tài liệu trong nhóm mới có trạng thái kiểm duyệt", HttpStatus.BAD_REQUEST);
+    MODERATION_NOT_GROUP_DOCUMENT(9203, "Chỉ tài liệu trong nhóm mới có trạng thái kiểm duyệt", HttpStatus.BAD_REQUEST),
+
+    // Payment errors
+    PAYMENT_NOT_FOUND(9301, "Không tìm thấy giao dịch thanh toán", HttpStatus.NOT_FOUND),
+    PAYMENT_PROVIDER_NOT_SUPPORTED(9302, "Cổng thanh toán không được hỗ trợ", HttpStatus.BAD_REQUEST),
+    PAYMENT_AMOUNT_INVALID(9303, "Số tiền thanh toán không hợp lệ", HttpStatus.BAD_REQUEST),
+    PAYMENT_SIGNATURE_INVALID(9304, "Chữ ký giao dịch không hợp lệ", HttpStatus.BAD_REQUEST),
+    PAYMENT_ALREADY_PROCESSED(9305, "Giao dịch đã được xử lý trước đó", HttpStatus.BAD_REQUEST),
+    PAYMENT_PROVIDER_CONFIG_MISSING(9306, "Cấu hình cổng thanh toán chưa sẵn sàng", HttpStatus.SERVICE_UNAVAILABLE),
+    PAYMENT_INITIATE_FAILED(9307, "Khởi tạo giao dịch thanh toán thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
+    PAYMENT_TARGET_REQUIRED(9308, "Mã gói (planCode hoặc addonCode) là bắt buộc", HttpStatus.BAD_REQUEST),
+    PAYMENT_GROUP_ID_REQUIRED(9309, "groupId là bắt buộc khi mua cho nhóm", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;

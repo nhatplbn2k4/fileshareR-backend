@@ -1,0 +1,38 @@
+# Exclude these from Docker build context (faster builds + smaller images)
+
+target/
+*.iml
+.idea/
+.vscode/
+.git/
+.gitignore
+.gitattributes
+
+# Secrets — NEVER bake into image
+.env
+.env.*
+!.env.example
+
+# Maven wrapper jar IS needed in image (multi-stage builder uses it)
+# So keep .mvn/ and mvnw
+
+# Test resources not needed at runtime
+src/test/
+
+# Documentation
+README.md
+docs/
+HELP.md
+*.md
+
+# OS / IDE noise
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime data — uploads should NOT come from build context
+uploads/
+temp/
