@@ -10,10 +10,12 @@ FROM eclipse-temurin:21-jdk-jammy AS builder
 
 WORKDIR /build
 
-# Copy Maven wrapper + pom.xml first để cache dependency layer
+# Copy Maven wrapper + pom.xml + lombok.config first để cache dependency layer
 # (chỉ chạy lại khi pom.xml thay đổi, không phải mỗi lần source code đổi)
+# lombok.config bắt buộc — chứa lombok.copyableAnnotations += @Qualifier để
+# Spring DI chọn đúng bean khi inject vào constructor.
 COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
+COPY mvnw pom.xml lombok.config ./
 RUN chmod +x mvnw \
     && ./mvnw -B dependency:go-offline
 
