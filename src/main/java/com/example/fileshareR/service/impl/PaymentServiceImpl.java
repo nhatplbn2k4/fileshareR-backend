@@ -183,8 +183,12 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findByTxnRef(txnRef)
                 .orElseThrow(() -> new CustomException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // Browser return is informational — do NOT apply purchase here (IPN owns that).
-        // Just surface current status to frontend so the result page can render.
+        // VNPay sandbox does not always deliver IPN, so finalize from the browser
+        // return when the payment is still PENDING. Delegates to handleIpn which is
+        // idempotent — a later IPN replay short-circuits on the terminal-state guard.
+        if (payment.getStatus() == PaymentStatus.PENDING) {
+            return handleIpn(provider, params);
+        }
         return toResponse(payment);
     }
 
