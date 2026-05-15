@@ -148,8 +148,7 @@ public class VnpayPaymentStrategy implements PaymentProviderStrategy {
     }
 
     private String urlEncode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.US_ASCII)
-                .replace("+", "%20");
+        return URLEncoder.encode(value, StandardCharsets.US_ASCII);
     }
 
     private String hmacSha512(String secret, String data) {
