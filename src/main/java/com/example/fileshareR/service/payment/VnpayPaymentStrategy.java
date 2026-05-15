@@ -73,6 +73,9 @@ public class VnpayPaymentStrategy implements PaymentProviderStrategy {
         String secureHash = hmacSha512(cfg.getHashSecret(), hashData);
         String url = cfg.getPayUrl() + "?" + hashData + "&vnp_SecureHash=" + secureHash;
         log.info("VNPay create url for txnRef={} amount={}", payment.getTxnRef(), payment.getAmountVnd());
+        log.info("VNPay DEBUG hashData={}", hashData);
+        log.info("VNPay DEBUG secureHash={}", secureHash);
+        log.info("VNPay DEBUG fullUrl={}", url);
         return url;
     }
 
@@ -157,7 +160,7 @@ public class VnpayPaymentStrategy implements PaymentProviderStrategy {
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGO));
             byte[] digest = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) sb.append(String.format("%02x", b));
+            for (byte b : digest) sb.append(String.format("%02x", b & 0xff));
             return sb.toString();
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to compute HMAC-SHA512", ex);
