@@ -75,7 +75,7 @@ public class Payment extends BaseEntity {
     @Column(name = "raw_response", columnDefinition = "TEXT")
     private String rawResponse;
 
-    @Column(name = "return_url", length = 2000)
+    @Column(name = "return_url", columnDefinition = "TEXT")
     private String returnUrl;
 
     @Column(name = "ipn_received_at")
