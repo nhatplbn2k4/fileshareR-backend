@@ -62,6 +62,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/public-download").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/preview").permitAll()
 
+                        // Payment provider callbacks (server-to-server + browser return — no JWT)
+                        .requestMatchers("/api/payments/vnpay/return", "/api/payments/vnpay/ipn").permitAll()
+                        .requestMatchers("/api/payments/momo/return", "/api/payments/momo/ipn").permitAll()
+
                         // Admin endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
