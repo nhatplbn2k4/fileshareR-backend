@@ -35,6 +35,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Restore Firebase service-account JSON
+        # File is gitignored (contains Firebase Admin private key). The base64-encoded
+        # content lives in repo secret FIREBASE_SERVICE_ACCOUNT_B64. Without this
+        # the image boots but firebase-login endpoint fails with
+        # "FirebaseApp with name [DEFAULT] doesn't exist".
+        env:
+          FIREBASE_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
+        run: |
+          if [ -z "$FIREBASE_B64" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT_B64 secret is empty — OAuth login will fail"
+            exit 1
+          fi
+          echo "$FIREBASE_B64" | base64 -d > src/main/resources/filesharer-b8ff3-firebase-adminsdk-fbsvc-5f4a239563.json
+          test -s src/main/resources/filesharer-b8ff3-firebase-adminsdk-fbsvc-5f4a239563.json
+          echo "Firebase JSON restored ($(wc -c < src/main/resources/filesharer-b8ff3-firebase-adminsdk-fbsvc-5f4a239563.json) bytes)"
+
       - name: Extract short SHA
         id: sha
         run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
