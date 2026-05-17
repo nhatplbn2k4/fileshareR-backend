@@ -5,11 +5,14 @@ import com.example.fileshareR.dto.request.AdminUpdateUserRequest;
 import com.example.fileshareR.dto.request.PlanAdminRequest;
 import com.example.fileshareR.dto.response.AdminChartsResponse;
 import com.example.fileshareR.dto.response.AdminDocumentSummary;
+import com.example.fileshareR.dto.response.AdminPaymentSummary;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
 import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.PaymentProvider;
+import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.VisibilityType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,4 +46,9 @@ public interface AdminService {
     Page<AdminDocumentSummary> listDocuments(String search, FileType fileType, VisibilityType visibility,
                                               Long userId, Pageable pageable);
     void deleteDocument(Long documentId);
+
+    // ── Payments ─────────────────────────────────────────────────────────────
+    Page<AdminPaymentSummary> listPayments(String search, PaymentProvider provider, PaymentStatus status,
+                                            Pageable pageable);
+    AdminPaymentSummary getPayment(Long paymentId);
 }
