@@ -10,20 +10,24 @@ import com.example.fileshareR.dto.response.AdminChartsResponse.DailyPoint;
 import com.example.fileshareR.dto.response.AdminChartsResponse.LabeledCount;
 import com.example.fileshareR.dto.response.AdminChartsResponse.MonthlyPoint;
 import com.example.fileshareR.dto.response.AdminDocumentSummary;
+import com.example.fileshareR.dto.response.AdminGroupSummary;
 import com.example.fileshareR.dto.response.AdminPaymentSummary;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
 import com.example.fileshareR.entity.Document;
+import com.example.fileshareR.entity.Group;
 import com.example.fileshareR.entity.Payment;
 import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.GroupVisibilityType;
 import com.example.fileshareR.enums.PaymentProvider;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
 import com.example.fileshareR.enums.VisibilityType;
 import com.example.fileshareR.service.DocumentService;
+import com.example.fileshareR.service.GroupService;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.repository.PaymentRepository;
@@ -59,6 +63,7 @@ public class AdminServiceImpl implements AdminService {
     private final PlanRepository planRepository;
     private final StorageAddonRepository storageAddonRepository;
     private final DocumentService documentService;
+    private final GroupService groupService;
 
     @PersistenceContext
     private EntityManager em;
@@ -314,6 +319,55 @@ public class AdminServiceImpl implements AdminService {
 
         userRepository.save(user);
         return toSummary(user);
+    }
+
+    // ── Group management ──────────────────────────────────────────────────────
+
+    @Override
+    public Page<AdminGroupSummary> listGroups(String search, GroupVisibilityType visibility, Pageable pageable) {
+        return groupRepository
+                .findAllForAdmin(search, visibility, pageable)
+                .map(this::toGroupSummary);
+    }
+
+    @Override
+    public void deleteGroup(Long groupId) {
+        groupService.adminDeleteGroup(groupId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private AdminGroupSummary toGroupSummary(Group g) {
+        var owner = g.getOwner();
+        var plan = g.getPlan();
+        long quota = plan != null ? plan.getQuotaBytes() : 0L;
+        long bonus = g.getBonusStorageBytes() != null ? g.getBonusStorageBytes() : 0L;
+
+        long memberCount = ((Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM group_members WHERE group_id = :gid")
+                .setParameter("gid", g.getId())
+                .getSingleResult()).longValue();
+        long documentCount = ((Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM documents WHERE group_id = :gid")
+                .setParameter("gid", g.getId())
+                .getSingleResult()).longValue();
+
+        return AdminGroupSummary.builder()
+                .id(g.getId())
+                .name(g.getName())
+                .description(g.getDescription())
+                .visibility(g.getVisibility() != null ? g.getVisibility().name() : null)
+                .avatarUrl(g.getAvatarUrl())
+                .requireApproval(g.getRequireApproval())
+                .ownerId(owner != null ? owner.getId() : null)
+                .ownerEmail(owner != null ? owner.getEmail() : null)
+                .ownerFullName(owner != null ? owner.getFullName() : null)
+                .planCode(plan != null ? plan.getCode() : null)
+                .storageUsed(g.getStorageUsed() != null ? g.getStorageUsed() : 0L)
+                .totalQuotaBytes(quota + bonus)
+                .memberCount(memberCount)
+                .documentCount(documentCount)
+                .createdAt(g.getCreatedAt())
+                .build();
     }
 
     // ── Payment management ────────────────────────────────────────────────────

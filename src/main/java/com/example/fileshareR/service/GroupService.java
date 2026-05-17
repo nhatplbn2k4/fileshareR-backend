@@ -20,6 +20,9 @@ public interface GroupService {
 
     void deleteGroup(Long groupId, Long userId);
 
+    /** Xoá nhóm bởi admin — bỏ qua check ownership */
+    void adminDeleteGroup(Long groupId);
+
     GroupResponse getGroupById(Long groupId, Long requesterId);
 
     List<GroupResponse> getMyGroups(Long userId);
