@@ -18,6 +18,7 @@ import com.example.fileshareR.enums.FolderVisibilityType;
 import com.example.fileshareR.enums.GroupMemberRole;
 import com.example.fileshareR.enums.GroupVisibilityType;
 import com.example.fileshareR.enums.ModerationStatus;
+import com.example.fileshareR.enums.NotificationType;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.FolderRepository;
 import com.example.fileshareR.repository.GroupBanRepository;
@@ -28,6 +29,7 @@ import com.example.fileshareR.service.ContentModerationService;
 import com.example.fileshareR.service.DocumentService;
 import com.example.fileshareR.service.FileStorageService;
 import com.example.fileshareR.service.NlpService;
+import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.TextExtractionService;
 import com.example.fileshareR.service.UserService;
@@ -66,6 +68,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final GroupFolderRepository groupFolderRepository;
     private final StorageQuotaService storageQuotaService;
     private final ContentModerationService contentModerationService;
+    private final NotificationService notificationService;
 
     private static final int TOP_KEYWORDS_COUNT = 10;
     private static final int SUMMARY_MAX_WORDS = 50; // Tối đa 50 từ cho summary ngắn gọn
@@ -342,6 +345,20 @@ public class DocumentServiceImpl implements DocumentService {
         // Tăng download count
         document.setDownloadCount(document.getDownloadCount() + 1);
         documentRepository.save(document);
+
+        // Notify owner — but only when someone OTHER than the owner is downloading
+        if (!isOwner) {
+            String downloaderLabel = userId == null
+                    ? "Một người dùng ẩn danh"
+                    : "Một người dùng";
+            notificationService.notifyUser(
+                    document.getUser(),
+                    NotificationType.DOCUMENT_DOWNLOADED,
+                    "Tài liệu được tải xuống",
+                    downloaderLabel + " vừa tải tài liệu \"" + document.getTitle() + "\"",
+                    document.getId(),
+                    "/documents/" + document.getId());
+        }
 
         // Lấy file
         try {
@@ -743,6 +760,26 @@ public class DocumentServiceImpl implements DocumentService {
         storageQuotaService.incrementGroupUsage(group, fileSize);
         log.info("Group document {} saved to group {} (status={})",
                 document.getId(), groupId, moderationStatus);
+
+        // Notify group admins + owner when doc needs moderation review
+        if (moderationStatus == ModerationStatus.PENDING) {
+            List<Long> adminUserIds = groupMemberRepository.findByGroupId(groupId).stream()
+                    .filter(m -> m.getRole() == GroupMemberRole.ADMIN
+                            || m.getRole() == GroupMemberRole.OWNER)
+                    .map(m -> m.getUser().getId())
+                    .toList();
+            for (Long adminId : adminUserIds) {
+                notificationService.notifyUser(
+                        adminId,
+                        NotificationType.GROUP_DOC_PENDING_REVIEW,
+                        "Tài liệu cần duyệt",
+                        user.getFullName() + " vừa upload tài liệu \""
+                                + document.getTitle() + "\" cần admin duyệt.",
+                        document.getId(),
+                        "/groups/" + groupId);
+            }
+        }
+
         return mapToResponse(document);
     }
 
@@ -792,7 +829,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Resource downloadGroupDocument(Long documentId, Long groupId, Long requesterId) {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new CustomException(ErrorCode.GROUP_NOT_FOUND));
@@ -821,6 +858,19 @@ public class DocumentServiceImpl implements DocumentService {
 
         document.setDownloadCount(document.getDownloadCount() + 1);
         documentRepository.save(document);
+
+        // Notify owner — only when someone OTHER than owner is downloading
+        boolean isOwner = requesterId != null && document.getUser().getId().equals(requesterId);
+        if (!isOwner) {
+            notificationService.notifyUser(
+                    document.getUser(),
+                    NotificationType.DOCUMENT_DOWNLOADED,
+                    "Tài liệu nhóm được tải xuống",
+                    "Một thành viên nhóm \"" + group.getName()
+                            + "\" vừa tải tài liệu \"" + document.getTitle() + "\"",
+                    document.getId(),
+                    "/groups/" + groupId);
+        }
 
         try {
             Path filePath = fileStorageService.getFilePath(document.getFileUrl());

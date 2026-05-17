@@ -66,6 +66,10 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/payments/vnpay/return", "/api/payments/vnpay/ipn").permitAll()
                         .requestMatchers("/api/payments/momo/return", "/api/payments/momo/ipn").permitAll()
 
+                        // STOMP / SockJS handshake — JWT is enforced by WebSocketConfig
+                        // CONNECT interceptor, not by the HTTP security chain.
+                        .requestMatchers("/ws/**").permitAll()
+
                         // Admin endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 

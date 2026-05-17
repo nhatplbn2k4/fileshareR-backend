@@ -23,12 +23,14 @@ import com.example.fileshareR.enums.BanType;
 import com.example.fileshareR.enums.GroupMemberRole;
 import com.example.fileshareR.enums.GroupVisibilityType;
 import com.example.fileshareR.enums.JoinRequestStatus;
+import com.example.fileshareR.enums.NotificationType;
 import com.example.fileshareR.repository.GroupBanRepository;
 import com.example.fileshareR.repository.GroupJoinRequestRepository;
 import com.example.fileshareR.repository.GroupMemberRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.service.GroupFolderService;
 import com.example.fileshareR.service.GroupService;
+import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +58,7 @@ public class GroupServiceImpl implements GroupService {
     private final com.example.fileshareR.repository.GroupFolderRepository groupFolderRepository;
     private final com.example.fileshareR.service.FileStorageService fileStorageService;
     private final com.example.fileshareR.repository.PlanRepository planRepository;
+    private final NotificationService notificationService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // CRUD Nhóm
@@ -87,6 +90,15 @@ public class GroupServiceImpl implements GroupService {
         groupMemberRepository.save(ownerMember);
 
         log.info("Group {} created by user {}", group.getId(), ownerId);
+
+        // Notify platform admins
+        notificationService.notifyAllAdmins(
+                NotificationType.PLATFORM_GROUP_CREATED,
+                "Nhóm mới được tạo",
+                owner.getFullName() + " vừa tạo nhóm \"" + group.getName() + "\"",
+                group.getId(),
+                "/admin/groups");
+
         return mapToGroupResponse(group, ownerId);
     }
 
@@ -170,6 +182,13 @@ public class GroupServiceImpl implements GroupService {
         log.info("Admin deleting group {}", groupId);
 
         Group group = getGroupEntityById(groupId);
+        String groupName = group.getName();
+        Long ownerUserId = group.getOwner() != null ? group.getOwner().getId() : null;
+
+        // Capture member IDs BEFORE cascade so we can still notify after deletion
+        List<Long> memberUserIds = groupMemberRepository.findByGroupId(groupId).stream()
+                .map(m -> m.getUser().getId())
+                .toList();
 
         // Same cascade as user-facing deleteGroup, just without the owner check.
         documentRepository.findByGroupId(groupId)
@@ -188,6 +207,20 @@ public class GroupServiceImpl implements GroupService {
         groupRepository.delete(group);
 
         log.info("Group {} deleted by admin", groupId);
+
+        // Notify every former member — group owner gets it too (frontend uses this
+        // notification to fire the blocking popup + redirect when the user is
+        // currently inside the deleted group's page).
+        for (Long uid : memberUserIds) {
+            boolean isOwner = ownerUserId != null && ownerUserId.equals(uid);
+            notificationService.notifyUser(
+                    uid,
+                    NotificationType.GROUP_DELETED_BY_PLATFORM,
+                    isOwner ? "Nhóm của bạn đã bị xóa" : "Nhóm bạn tham gia đã bị xóa",
+                    "Nhóm \"" + groupName + "\" đã bị quản trị viên hệ thống xóa.",
+                    groupId,
+                    "/groups");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -346,6 +379,16 @@ public class GroupServiceImpl implements GroupService {
             log.info("User {} revoked ADMIN in group {}", request.getUserId(), groupId);
         }
         groupMemberRepository.save(targetMember);
+
+        // Notify the affected member
+        String newRoleLabel = Boolean.TRUE.equals(request.getIsAdmin()) ? "Quản trị viên" : "Thành viên";
+        notificationService.notifyUser(
+                targetMember.getUser(),
+                NotificationType.GROUP_ROLE_CHANGED,
+                "Vai trò trong nhóm thay đổi",
+                "Vai trò của bạn trong nhóm \"" + group.getName() + "\" được đổi thành \"" + newRoleLabel + "\"",
+                groupId,
+                "/groups/" + groupId);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -410,6 +453,23 @@ public class GroupServiceImpl implements GroupService {
             log.info("User {} upload-banned until {} in group {}",
                     request.getUserId(), expiresAt, groupId);
         }
+
+        // Notify the affected user
+        String banLabel = request.getBanType() == BanType.KICKED
+                ? "Bạn đã bị xóa khỏi nhóm"
+                : "Bạn bị cấm upload trong nhóm";
+        String banMessage = request.getBanType() == BanType.KICKED
+                ? "Bạn vừa bị xóa khỏi nhóm \"" + group.getName() + "\""
+                : "Bạn bị cấm upload trong nhóm \"" + group.getName() + "\""
+                        + (expiresAt != null ? " đến " + expiresAt : "");
+        notificationService.notifyUser(
+                targetUser,
+                NotificationType.GROUP_KICKED,
+                banLabel,
+                banMessage + (request.getReason() != null && !request.getReason().isBlank()
+                        ? " (Lý do: " + request.getReason() + ")" : ""),
+                groupId,
+                null);
 
         return mapToBanResponse(ban);
     }
@@ -597,6 +657,23 @@ public class GroupServiceImpl implements GroupService {
                 .build();
         request = joinRequestRepository.save(request);
         log.info("Join request {} created for group {}", request.getId(), group.getId());
+
+        // Notify group admins + owner
+        List<Long> adminUserIds = groupMemberRepository.findByGroupId(group.getId()).stream()
+                .filter(m -> m.getRole() == GroupMemberRole.ADMIN
+                        || m.getRole() == GroupMemberRole.OWNER)
+                .map(m -> m.getUser().getId())
+                .toList();
+        for (Long adminId : adminUserIds) {
+            notificationService.notifyUser(
+                    adminId,
+                    NotificationType.GROUP_JOIN_REQUEST,
+                    "Yêu cầu gia nhập nhóm",
+                    user.getFullName() + " xin gia nhập nhóm \"" + group.getName() + "\"",
+                    request.getId(),
+                    "/groups/" + group.getId());
+        }
+
         return mapToJoinRequestResponse(request);
     }
 
@@ -630,6 +707,16 @@ public class GroupServiceImpl implements GroupService {
 
         addMemberDirectly(request.getGroup(), request.getUser().getId());
         log.info("Request {} approved, user {} added to group {}", requestId, request.getUser().getId(), groupId);
+
+        // Notify the requester
+        notificationService.notifyUser(
+                request.getUser(),
+                NotificationType.GROUP_JOIN_APPROVED,
+                "Yêu cầu gia nhập đã được chấp nhận",
+                "Yêu cầu gia nhập nhóm \"" + request.getGroup().getName() + "\" đã được duyệt. Chào mừng!",
+                groupId,
+                "/groups/" + groupId);
+
         return mapToJoinRequestResponse(request);
     }
 
@@ -650,6 +737,15 @@ public class GroupServiceImpl implements GroupService {
         request.setReviewedAt(LocalDateTime.now());
         joinRequestRepository.save(request);
         log.info("Request {} rejected", requestId);
+
+        notificationService.notifyUser(
+                request.getUser(),
+                NotificationType.GROUP_JOIN_REJECTED,
+                "Yêu cầu gia nhập bị từ chối",
+                "Yêu cầu gia nhập nhóm \"" + request.getGroup().getName() + "\" đã bị từ chối.",
+                groupId,
+                null);
+
         return mapToJoinRequestResponse(request);
     }
 

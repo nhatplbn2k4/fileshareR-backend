@@ -10,6 +10,7 @@ import com.example.fileshareR.entity.Payment;
 import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
+import com.example.fileshareR.enums.NotificationType;
 import com.example.fileshareR.enums.PaymentProvider;
 import com.example.fileshareR.enums.PaymentScope;
 import com.example.fileshareR.enums.PaymentStatus;
@@ -20,6 +21,7 @@ import com.example.fileshareR.repository.PlanRepository;
 import com.example.fileshareR.repository.StorageAddonRepository;
 import com.example.fileshareR.repository.UserRepository;
 import com.example.fileshareR.service.BillingService;
+import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.service.PaymentService;
 import com.example.fileshareR.service.payment.PaymentProviderStrategy;
 import com.example.fileshareR.service.payment.VerificationResult;
@@ -46,6 +48,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final StorageAddonRepository addonRepository;
     private final GroupRepository groupRepository;
     private final BillingService billingService;
+    private final NotificationService notificationService;
 
     private final List<PaymentProviderStrategy> strategies;
     private Map<PaymentProvider, PaymentProviderStrategy> strategyMap;
@@ -250,6 +253,9 @@ public class PaymentServiceImpl implements PaymentService {
                     billingService.purchaseGroupAddon(payment.getGroupId(), userId, payment.getAddonCode());
                 }
             }
+
+            // Notify platform admins (post-purchase, post-apply)
+            notifyAdminsForPurchase(payment);
         } catch (RuntimeException ex) {
             log.error("Apply purchase failed AFTER successful payment txnRef={} — manual reconciliation needed",
                     payment.getTxnRef(), ex);
@@ -258,6 +264,30 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setFailureReason("Apply purchase failed: " + ex.getMessage());
             paymentRepository.save(payment);
         }
+    }
+
+    private void notifyAdminsForPurchase(Payment payment) {
+        String buyerName = payment.getUser().getFullName();
+        boolean isPlan = payment.getPurchaseType() == PurchaseType.PLAN;
+        NotificationType type = isPlan
+                ? NotificationType.PLATFORM_PLAN_UPGRADED
+                : NotificationType.PLATFORM_ADDON_PURCHASED;
+        String code = isPlan ? payment.getPlanCode() : payment.getAddonCode();
+        String scopeLabel = payment.getScope() == PaymentScope.GROUP ? "nhóm" : "cá nhân";
+
+        String title = isPlan
+                ? "Người dùng nâng cấp gói"
+                : "Người dùng mua addon";
+        String message = String.format(
+                "%s vừa %s \"%s\" (%s) — %,d VND",
+                buyerName,
+                isPlan ? "nâng cấp gói" : "mua addon",
+                code,
+                scopeLabel,
+                payment.getAmountVnd() != null ? payment.getAmountVnd() : 0);
+
+        notificationService.notifyAllAdmins(
+                type, title, message, payment.getId(), "/admin/payments");
     }
 
     private String generateTxnRef() {

@@ -22,12 +22,14 @@ import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.FileType;
 import com.example.fileshareR.enums.GroupVisibilityType;
+import com.example.fileshareR.enums.NotificationType;
 import com.example.fileshareR.enums.PaymentProvider;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
 import com.example.fileshareR.enums.VisibilityType;
 import com.example.fileshareR.service.DocumentService;
 import com.example.fileshareR.service.GroupService;
+import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.repository.PaymentRepository;
@@ -64,6 +66,7 @@ public class AdminServiceImpl implements AdminService {
     private final StorageAddonRepository storageAddonRepository;
     private final DocumentService documentService;
     private final GroupService groupService;
+    private final NotificationService notificationService;
 
     @PersistenceContext
     private EntityManager em;
@@ -308,6 +311,10 @@ public class AdminServiceImpl implements AdminService {
                     "Không thể tự vô hiệu hoá tài khoản admin đang đăng nhập.");
         }
 
+        boolean nowBanned = req.getIsActive() != null
+                && !req.getIsActive()
+                && Boolean.TRUE.equals(user.getIsActive());
+
         if (req.getPlanCode() != null && !req.getPlanCode().isBlank()) {
             Plan plan = planRepository.findByCode(req.getPlanCode())
                     .orElseThrow(() -> new CustomException(ErrorCode.PLAN_NOT_FOUND));
@@ -318,6 +325,22 @@ public class AdminServiceImpl implements AdminService {
         }
 
         userRepository.save(user);
+
+        // Notify the user IF they were just banned by platform admin
+        // (frontend uses this notification to render the blocking ban modal +
+        // force-logout). The notification persists even though they can no
+        // longer login — useful for audit when isActive flips back later.
+        if (nowBanned) {
+            notificationService.notifyUser(
+                    user,
+                    NotificationType.USER_BANNED_BY_PLATFORM,
+                    "Tài khoản đã bị khoá",
+                    "Tài khoản của bạn đã bị quản trị viên hệ thống vô hiệu hoá. "
+                            + "Vui lòng liên hệ hỗ trợ nếu bạn cho rằng đây là nhầm lẫn.",
+                    user.getId(),
+                    null);
+        }
+
         return toSummary(user);
     }
 
@@ -331,6 +354,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public void deleteGroup(Long groupId) {
         groupService.adminDeleteGroup(groupId);
     }
@@ -421,6 +445,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public void deleteDocument(Long documentId) {
         documentService.adminDeleteDocument(documentId);
     }
