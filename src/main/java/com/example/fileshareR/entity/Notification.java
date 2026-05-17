@@ -24,8 +24,12 @@ public class Notification {
     private User user;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 64)
     private NotificationType type;
+
+    // Optional click-through target on the frontend (e.g. /documents/123, /groups/4)
+    @Column(name = "link", length = 512)
+    private String link;
 
     @Column(nullable = false, length = 255)
     private String title;
@@ -36,6 +40,7 @@ public class Notification {
     @Column(name = "reference_id")
     private Long referenceId;
 
+    @Builder.Default
     @Column(name = "is_read", nullable = false)
     private Boolean isRead = false;
 
