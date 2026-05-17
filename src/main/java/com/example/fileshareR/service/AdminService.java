@@ -4,10 +4,13 @@ import com.example.fileshareR.dto.request.AddonAdminRequest;
 import com.example.fileshareR.dto.request.AdminUpdateUserRequest;
 import com.example.fileshareR.dto.request.PlanAdminRequest;
 import com.example.fileshareR.dto.response.AdminChartsResponse;
+import com.example.fileshareR.dto.response.AdminDocumentSummary;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
 import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
+import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.VisibilityType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -35,4 +38,9 @@ public interface AdminService {
     StorageAddon createAddon(AddonAdminRequest req);
     StorageAddon updateAddon(Long addonId, AddonAdminRequest req);
     void deleteAddon(Long addonId);
+
+    // ── Documents ────────────────────────────────────────────────────────────
+    Page<AdminDocumentSummary> listDocuments(String search, FileType fileType, VisibilityType visibility,
+                                              Long userId, Pageable pageable);
+    void deleteDocument(Long documentId);
 }

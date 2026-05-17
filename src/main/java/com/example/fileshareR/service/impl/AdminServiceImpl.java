@@ -9,13 +9,18 @@ import com.example.fileshareR.dto.response.AdminChartsResponse;
 import com.example.fileshareR.dto.response.AdminChartsResponse.DailyPoint;
 import com.example.fileshareR.dto.response.AdminChartsResponse.LabeledCount;
 import com.example.fileshareR.dto.response.AdminChartsResponse.MonthlyPoint;
+import com.example.fileshareR.dto.response.AdminDocumentSummary;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
+import com.example.fileshareR.entity.Document;
 import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
+import com.example.fileshareR.enums.FileType;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
+import com.example.fileshareR.enums.VisibilityType;
+import com.example.fileshareR.service.DocumentService;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.repository.PaymentRepository;
@@ -50,6 +55,7 @@ public class AdminServiceImpl implements AdminService {
     private final PaymentRepository paymentRepository;
     private final PlanRepository planRepository;
     private final StorageAddonRepository storageAddonRepository;
+    private final DocumentService documentService;
 
     @PersistenceContext
     private EntityManager em;
@@ -305,6 +311,42 @@ public class AdminServiceImpl implements AdminService {
 
         userRepository.save(user);
         return toSummary(user);
+    }
+
+    // ── Document management ───────────────────────────────────────────────────
+
+    @Override
+    public Page<AdminDocumentSummary> listDocuments(String search, FileType fileType, VisibilityType visibility,
+                                                     Long userId, Pageable pageable) {
+        return documentRepository
+                .findAllForAdmin(search, fileType, visibility, userId, pageable)
+                .map(this::toDocSummary);
+    }
+
+    @Override
+    public void deleteDocument(Long documentId) {
+        documentService.adminDeleteDocument(documentId);
+    }
+
+    private AdminDocumentSummary toDocSummary(Document d) {
+        var owner = d.getUser();
+        var grp = d.getGroup();
+        return AdminDocumentSummary.builder()
+                .id(d.getId())
+                .title(d.getTitle())
+                .fileName(d.getFileName())
+                .fileType(d.getFileType() != null ? d.getFileType().name() : null)
+                .fileSize(d.getFileSize())
+                .visibility(d.getVisibility() != null ? d.getVisibility().name() : null)
+                .moderationStatus(d.getModerationStatus() != null ? d.getModerationStatus().name() : null)
+                .downloadCount(d.getDownloadCount())
+                .ownerId(owner != null ? owner.getId() : null)
+                .ownerEmail(owner != null ? owner.getEmail() : null)
+                .ownerFullName(owner != null ? owner.getFullName() : null)
+                .groupId(grp != null ? grp.getId() : null)
+                .groupName(grp != null ? grp.getName() : null)
+                .createdAt(d.getCreatedAt())
+                .build();
     }
 
     // ── Plan management ───────────────────────────────────────────────────────

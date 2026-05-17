@@ -33,6 +33,9 @@ public interface DocumentService {
     /** Xóa document */
     void deleteDocument(Long documentId, Long userId);
 
+    /** Xóa document bởi admin — bỏ qua check quyền sở hữu */
+    void adminDeleteDocument(Long documentId);
+
     /** Download document (cá nhân) */
     Resource downloadDocument(Long documentId, Long userId);
 
