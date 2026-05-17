@@ -1,20 +1,29 @@
 package com.example.fileshareR.service.impl;
 
+import com.example.fileshareR.common.exception.CustomException;
+import com.example.fileshareR.common.exception.ErrorCode;
+import com.example.fileshareR.dto.request.AdminUpdateUserRequest;
 import com.example.fileshareR.dto.response.AdminChartsResponse;
 import com.example.fileshareR.dto.response.AdminChartsResponse.DailyPoint;
 import com.example.fileshareR.dto.response.AdminChartsResponse.LabeledCount;
 import com.example.fileshareR.dto.response.AdminChartsResponse.MonthlyPoint;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
+import com.example.fileshareR.dto.response.AdminUserSummary;
+import com.example.fileshareR.entity.Plan;
+import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.repository.PaymentRepository;
+import com.example.fileshareR.repository.PlanRepository;
 import com.example.fileshareR.repository.UserRepository;
 import com.example.fileshareR.service.AdminService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +44,7 @@ public class AdminServiceImpl implements AdminService {
     private final DocumentRepository documentRepository;
     private final GroupRepository groupRepository;
     private final PaymentRepository paymentRepository;
+    private final PlanRepository planRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -248,6 +258,69 @@ public class AdminServiceImpl implements AdminService {
             return d.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
         }
         return LocalDate.parse(value.toString());
+    }
+
+    // ── User management ───────────────────────────────────────────────────────
+
+    @Override
+    public Page<AdminUserSummary> listUsers(String search, String planCode, Boolean isActive, Pageable pageable) {
+        return userRepository
+                .findAllForAdmin(search, planCode, isActive, pageable)
+                .map(this::toSummary);
+    }
+
+    @Override
+    public AdminUserSummary getUser(Long userId) {
+        return userRepository.findById(userId)
+                .map(this::toSummary)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional
+    public AdminUserSummary updateUser(Long userId, AdminUpdateUserRequest req, Long actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        // Admin should not deactivate themselves — would lock out the only admin
+        // when the seeded account is the one performing the action.
+        if (req.getIsActive() != null && !req.getIsActive() && user.getId().equals(actingAdminId)) {
+            throw new CustomException(ErrorCode.BAD_REQUEST,
+                    "Không thể tự vô hiệu hoá tài khoản admin đang đăng nhập.");
+        }
+
+        if (req.getPlanCode() != null && !req.getPlanCode().isBlank()) {
+            Plan plan = planRepository.findByCode(req.getPlanCode())
+                    .orElseThrow(() -> new CustomException(ErrorCode.PLAN_NOT_FOUND));
+            user.setPlan(plan);
+        }
+        if (req.getIsActive() != null) {
+            user.setIsActive(req.getIsActive());
+        }
+
+        userRepository.save(user);
+        return toSummary(user);
+    }
+
+    private AdminUserSummary toSummary(User user) {
+        Plan plan = user.getPlan();
+        long quota = plan != null ? plan.getQuotaBytes() : 0L;
+        long bonus = user.getBonusStorageBytes() != null ? user.getBonusStorageBytes() : 0L;
+        return AdminUserSummary.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole() != null ? user.getRole().name() : null)
+                .authProvider(user.getAuthProvider() != null ? user.getAuthProvider().name() : null)
+                .isActive(user.getIsActive())
+                .emailVerified(user.getEmailVerified())
+                .planCode(plan != null ? plan.getCode() : null)
+                .planName(plan != null ? plan.getName() : null)
+                .storageUsed(user.getStorageUsed() != null ? user.getStorageUsed() : 0L)
+                .totalQuotaBytes(quota + bonus)
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 
     private List<DailyPoint> fillDailyGaps(LocalDate from, int days, Map<String, Long> byDate) {
