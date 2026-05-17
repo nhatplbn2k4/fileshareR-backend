@@ -10,13 +10,16 @@ import com.example.fileshareR.dto.response.AdminChartsResponse.DailyPoint;
 import com.example.fileshareR.dto.response.AdminChartsResponse.LabeledCount;
 import com.example.fileshareR.dto.response.AdminChartsResponse.MonthlyPoint;
 import com.example.fileshareR.dto.response.AdminDocumentSummary;
+import com.example.fileshareR.dto.response.AdminPaymentSummary;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
 import com.example.fileshareR.entity.Document;
+import com.example.fileshareR.entity.Payment;
 import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.PaymentProvider;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
 import com.example.fileshareR.enums.VisibilityType;
@@ -311,6 +314,46 @@ public class AdminServiceImpl implements AdminService {
 
         userRepository.save(user);
         return toSummary(user);
+    }
+
+    // ── Payment management ────────────────────────────────────────────────────
+
+    @Override
+    public Page<AdminPaymentSummary> listPayments(String search, PaymentProvider provider, PaymentStatus status,
+                                                   Pageable pageable) {
+        return paymentRepository
+                .findAllForAdmin(search, provider, status, pageable)
+                .map(this::toPaymentSummary);
+    }
+
+    @Override
+    public AdminPaymentSummary getPayment(Long paymentId) {
+        return paymentRepository.findById(paymentId)
+                .map(this::toPaymentSummary)
+                .orElseThrow(() -> new CustomException(ErrorCode.BAD_REQUEST, "Giao dịch không tồn tại"));
+    }
+
+    private AdminPaymentSummary toPaymentSummary(Payment p) {
+        var u = p.getUser();
+        return AdminPaymentSummary.builder()
+                .id(p.getId())
+                .txnRef(p.getTxnRef())
+                .providerTxnId(p.getProviderTxnId())
+                .provider(p.getProvider() != null ? p.getProvider().name() : null)
+                .purchaseType(p.getPurchaseType() != null ? p.getPurchaseType().name() : null)
+                .scope(p.getScope() != null ? p.getScope().name() : null)
+                .planCode(p.getPlanCode())
+                .addonCode(p.getAddonCode())
+                .amountVnd(p.getAmountVnd())
+                .status(p.getStatus() != null ? p.getStatus().name() : null)
+                .failureReason(p.getFailureReason())
+                .createdAt(p.getCreatedAt())
+                .ipnReceivedAt(p.getIpnReceivedAt())
+                .userId(u != null ? u.getId() : null)
+                .userEmail(u != null ? u.getEmail() : null)
+                .userFullName(u != null ? u.getFullName() : null)
+                .groupId(p.getGroupId())
+                .build();
     }
 
     // ── Document management ───────────────────────────────────────────────────
