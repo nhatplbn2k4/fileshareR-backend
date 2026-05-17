@@ -9,4 +9,8 @@ import java.util.Optional;
 @Repository
 public interface StorageAddonRepository extends JpaRepository<StorageAddon, Long> {
     Optional<StorageAddon> findByCode(String code);
+
+    boolean existsByCode(String code);
+
+    java.util.List<StorageAddon> findAllByOrderByPriceVndAsc();
 }
