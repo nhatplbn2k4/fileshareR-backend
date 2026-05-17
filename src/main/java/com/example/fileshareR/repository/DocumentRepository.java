@@ -1,8 +1,11 @@
 package com.example.fileshareR.repository;
 
 import com.example.fileshareR.entity.Document;
+import com.example.fileshareR.enums.FileType;
 import com.example.fileshareR.enums.ModerationStatus;
 import com.example.fileshareR.enums.VisibilityType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -104,4 +107,25 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
         " WHERE d.group_folder_id IN (SELECT id FROM folder_tree)",
         nativeQuery = true)
     Long sumFileSizeInGroupFolderTree(@Param("folderId") Long folderId);
+
+    /**
+     * Paged + filtered list for admin. All filters are optional (null/blank
+     * = no filter).
+     */
+    @Query("""
+        SELECT d FROM Document d
+        WHERE (:search IS NULL OR :search = ''
+               OR LOWER(d.title) LIKE LOWER(CONCAT('%', :search, '%'))
+               OR LOWER(d.fileName) LIKE LOWER(CONCAT('%', :search, '%'))
+               OR LOWER(d.user.email) LIKE LOWER(CONCAT('%', :search, '%')))
+          AND (:fileType IS NULL OR d.fileType = :fileType)
+          AND (:visibility IS NULL OR d.visibility = :visibility)
+          AND (:userId IS NULL OR d.user.id = :userId)
+        """)
+    Page<Document> findAllForAdmin(
+            @Param("search") String search,
+            @Param("fileType") FileType fileType,
+            @Param("visibility") VisibilityType visibility,
+            @Param("userId") Long userId,
+            Pageable pageable);
 }

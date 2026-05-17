@@ -293,6 +293,33 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    public void adminDeleteDocument(Long documentId) {
+        log.info("Admin deleting document {}", documentId);
+
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+
+        long size = document.getFileSize() != null ? document.getFileSize() : 0L;
+        Group docGroup = document.getGroup();
+
+        // Best-effort storage cleanup — keep DB delete on if vendor storage fails.
+        try {
+            fileStorageService.deleteFile(document.getFileUrl());
+        } catch (Exception ex) {
+            log.warn("Storage delete failed for doc {} (continuing DB delete): {}", documentId, ex.getMessage());
+        }
+
+        documentRepository.delete(document);
+
+        if (docGroup != null) {
+            storageQuotaService.decrementGroupUsage(docGroup, size);
+        } else {
+            storageQuotaService.decrementUserUsage(document.getUser(), size);
+        }
+        log.info("Admin delete done for document {}", documentId);
+    }
+
+    @Override
     public Resource downloadDocument(Long documentId, Long userId) {
         log.info("Downloading document {} for user {}", documentId, userId);
 
