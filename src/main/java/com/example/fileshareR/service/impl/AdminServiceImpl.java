@@ -32,6 +32,7 @@ import com.example.fileshareR.service.GroupService;
 import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupRepository;
+import com.example.fileshareR.repository.NotificationRepository;
 import com.example.fileshareR.repository.PaymentRepository;
 import com.example.fileshareR.repository.PlanRepository;
 import com.example.fileshareR.repository.StorageAddonRepository;
@@ -67,6 +68,7 @@ public class AdminServiceImpl implements AdminService {
     private final DocumentService documentService;
     private final GroupService groupService;
     private final NotificationService notificationService;
+    private final NotificationRepository notificationRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -314,6 +316,9 @@ public class AdminServiceImpl implements AdminService {
         boolean nowBanned = req.getIsActive() != null
                 && !req.getIsActive()
                 && Boolean.TRUE.equals(user.getIsActive());
+        boolean nowUnbanned = req.getIsActive() != null
+                && req.getIsActive()
+                && Boolean.FALSE.equals(user.getIsActive());
 
         if (req.getPlanCode() != null && !req.getPlanCode().isBlank()) {
             Plan plan = planRepository.findByCode(req.getPlanCode())
@@ -337,6 +342,22 @@ public class AdminServiceImpl implements AdminService {
                     "Tài khoản đã bị khoá",
                     "Tài khoản của bạn đã bị quản trị viên hệ thống vô hiệu hoá. "
                             + "Vui lòng liên hệ hỗ trợ nếu bạn cho rằng đây là nhầm lẫn.",
+                    user.getId(),
+                    null);
+        }
+
+        // When admin un-bans: mark the stale "banned" notifications read so
+        // frontend's loadInitial scan stops re-triggering the blocking modal;
+        // also push a one-shot informational "account restored" message.
+        if (nowUnbanned) {
+            notificationRepository.markAllAsReadByUserIdAndType(
+                    user.getId(), NotificationType.USER_BANNED_BY_PLATFORM);
+            notificationService.notifyUser(
+                    user,
+                    NotificationType.SYSTEM,
+                    "Tài khoản đã được khôi phục",
+                    "Quản trị viên hệ thống đã khôi phục tài khoản của bạn. "
+                            + "Bạn có thể tiếp tục sử dụng hệ thống bình thường.",
                     user.getId(),
                     null);
         }
