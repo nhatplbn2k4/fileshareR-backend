@@ -1,5 +1,9 @@
 package com.example.fileshareR.service.impl;
 
+import com.example.fileshareR.dto.response.AdminChartsResponse;
+import com.example.fileshareR.dto.response.AdminChartsResponse.DailyPoint;
+import com.example.fileshareR.dto.response.AdminChartsResponse.LabeledCount;
+import com.example.fileshareR.dto.response.AdminChartsResponse.MonthlyPoint;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
@@ -14,9 +18,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -96,5 +105,146 @@ public class AdminServiceImpl implements AdminService {
         }
         Number result = query.getSingleResult();
         return result == null ? 0L : result.longValue();
+    }
+
+    // ── Chart datasets ────────────────────────────────────────────────────────
+
+    @Override
+    public AdminChartsResponse getCharts() {
+        return AdminChartsResponse.builder()
+                .signupsLast30Days(signupsLast30Days())
+                .revenueLast30Days(revenueLast30Days())
+                .revenueLast12Months(revenueLast12Months())
+                .documentsByType(documentsByType())
+                .paymentsByStatus(paymentsByStatus())
+                .usersByPlan(usersByPlan())
+                .build();
+    }
+
+    /**
+     * Daily signup count for the last 30 days. Missing days are filled with 0 so
+     * the FE line chart renders evenly without gaps.
+     */
+    @SuppressWarnings("unchecked")
+    private List<DailyPoint> signupsLast30Days() {
+        LocalDate from = LocalDate.now().minusDays(29);
+        var rows = em.createNativeQuery(
+                "SELECT DATE(created_at) AS d, COUNT(*) AS c " +
+                        "FROM users WHERE created_at >= :since " +
+                        "GROUP BY DATE(created_at) ORDER BY d")
+                .setParameter("since", from.atStartOfDay())
+                .getResultList();
+
+        Map<String, Long> byDate = new HashMap<>();
+        for (Object row : rows) {
+            Object[] cols = (Object[]) row;
+            byDate.put(((Date) cols[0]).toLocalDate().toString(),
+                    ((Number) cols[1]).longValue());
+        }
+        return fillDailyGaps(from, 30, byDate);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<DailyPoint> revenueLast30Days() {
+        LocalDate from = LocalDate.now().minusDays(29);
+        var rows = em.createNativeQuery(
+                "SELECT DATE(created_at) AS d, COALESCE(SUM(amount_vnd), 0) AS r " +
+                        "FROM payments WHERE status = :status AND created_at >= :since " +
+                        "GROUP BY DATE(created_at) ORDER BY d")
+                .setParameter("status", PaymentStatus.SUCCESS.name())
+                .setParameter("since", from.atStartOfDay())
+                .getResultList();
+
+        Map<String, Long> byDate = new HashMap<>();
+        for (Object row : rows) {
+            Object[] cols = (Object[]) row;
+            byDate.put(((Date) cols[0]).toLocalDate().toString(),
+                    ((Number) cols[1]).longValue());
+        }
+        return fillDailyGaps(from, 30, byDate);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<MonthlyPoint> revenueLast12Months() {
+        LocalDate fromMonth = LocalDate.now().withDayOfMonth(1).minusMonths(11);
+        var rows = em.createNativeQuery(
+                "SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS m, " +
+                        "       COALESCE(SUM(amount_vnd), 0) AS r " +
+                        "FROM payments " +
+                        "WHERE status = :status AND created_at >= :since " +
+                        "GROUP BY DATE_TRUNC('month', created_at) " +
+                        "ORDER BY DATE_TRUNC('month', created_at)")
+                .setParameter("status", PaymentStatus.SUCCESS.name())
+                .setParameter("since", fromMonth.atStartOfDay())
+                .getResultList();
+
+        Map<String, Long> byMonth = new HashMap<>();
+        for (Object row : rows) {
+            Object[] cols = (Object[]) row;
+            byMonth.put((String) cols[0], ((Number) cols[1]).longValue());
+        }
+
+        List<MonthlyPoint> result = new ArrayList<>(12);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM");
+        for (int i = 0; i < 12; i++) {
+            String key = fromMonth.plusMonths(i).format(fmt);
+            result.add(MonthlyPoint.builder()
+                    .month(key)
+                    .value(byMonth.getOrDefault(key, 0L))
+                    .build());
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<LabeledCount> documentsByType() {
+        var rows = em.createNativeQuery(
+                "SELECT file_type::text AS t, COUNT(*) AS c " +
+                        "FROM documents GROUP BY file_type ORDER BY c DESC")
+                .getResultList();
+        return mapLabeledCount(rows);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<LabeledCount> paymentsByStatus() {
+        var rows = em.createNativeQuery(
+                "SELECT status AS s, COUNT(*) AS c " +
+                        "FROM payments GROUP BY status ORDER BY c DESC")
+                .getResultList();
+        return mapLabeledCount(rows);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<LabeledCount> usersByPlan() {
+        var rows = em.createNativeQuery(
+                "SELECT COALESCE(p.code, 'NO_PLAN') AS code, COUNT(u.id) AS c " +
+                        "FROM users u LEFT JOIN plans p ON p.id = u.plan_id " +
+                        "GROUP BY p.code ORDER BY c DESC")
+                .getResultList();
+        return mapLabeledCount(rows);
+    }
+
+    private List<LabeledCount> mapLabeledCount(List<?> rows) {
+        List<LabeledCount> out = new ArrayList<>(rows.size());
+        for (Object row : rows) {
+            Object[] cols = (Object[]) row;
+            out.add(LabeledCount.builder()
+                    .label(cols[0] == null ? "UNKNOWN" : cols[0].toString())
+                    .count(((Number) cols[1]).longValue())
+                    .build());
+        }
+        return out;
+    }
+
+    private List<DailyPoint> fillDailyGaps(LocalDate from, int days, Map<String, Long> byDate) {
+        List<DailyPoint> result = new ArrayList<>(days);
+        for (int i = 0; i < days; i++) {
+            String key = from.plusDays(i).toString();
+            result.add(DailyPoint.builder()
+                    .date(key)
+                    .value(byDate.getOrDefault(key, 0L))
+                    .build());
+        }
+        return result;
     }
 }
