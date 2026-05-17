@@ -1,5 +1,6 @@
 package com.example.fileshareR.controller;
 
+import com.example.fileshareR.dto.response.AdminChartsResponse;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.service.AdminService;
 import lombok.RequiredArgsConstructor;
@@ -25,5 +26,10 @@ public class AdminController {
     @GetMapping("/stats")
     public ResponseEntity<AdminStatsResponse> getStats() {
         return ResponseEntity.ok(adminService.getStats());
+    }
+
+    @GetMapping("/stats/charts")
+    public ResponseEntity<AdminChartsResponse> getCharts() {
+        return ResponseEntity.ok(adminService.getCharts());
     }
 }
