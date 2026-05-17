@@ -2,7 +2,9 @@ package com.example.fileshareR.service.impl;
 
 import com.example.fileshareR.common.exception.CustomException;
 import com.example.fileshareR.common.exception.ErrorCode;
+import com.example.fileshareR.dto.request.AddonAdminRequest;
 import com.example.fileshareR.dto.request.AdminUpdateUserRequest;
+import com.example.fileshareR.dto.request.PlanAdminRequest;
 import com.example.fileshareR.dto.response.AdminChartsResponse;
 import com.example.fileshareR.dto.response.AdminChartsResponse.DailyPoint;
 import com.example.fileshareR.dto.response.AdminChartsResponse.LabeledCount;
@@ -10,6 +12,7 @@ import com.example.fileshareR.dto.response.AdminChartsResponse.MonthlyPoint;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
 import com.example.fileshareR.entity.Plan;
+import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.UserRole;
@@ -17,6 +20,7 @@ import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.GroupRepository;
 import com.example.fileshareR.repository.PaymentRepository;
 import com.example.fileshareR.repository.PlanRepository;
+import com.example.fileshareR.repository.StorageAddonRepository;
 import com.example.fileshareR.repository.UserRepository;
 import com.example.fileshareR.service.AdminService;
 import jakarta.persistence.EntityManager;
@@ -45,6 +49,7 @@ public class AdminServiceImpl implements AdminService {
     private final GroupRepository groupRepository;
     private final PaymentRepository paymentRepository;
     private final PlanRepository planRepository;
+    private final StorageAddonRepository storageAddonRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -300,6 +305,161 @@ public class AdminServiceImpl implements AdminService {
 
         userRepository.save(user);
         return toSummary(user);
+    }
+
+    // ── Plan management ───────────────────────────────────────────────────────
+
+    @Override
+    public List<Plan> listPlans() {
+        return planRepository.findAllByOrderByPriceVndAsc();
+    }
+
+    @Override
+    @Transactional
+    public Plan createPlan(PlanAdminRequest req) {
+        if (req.getCode() == null || req.getCode().isBlank()) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Code không được để trống.");
+        }
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Tên gói không được để trống.");
+        }
+        if (req.getQuotaBytes() == null || req.getQuotaBytes() < 0) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Dung lượng (quotaBytes) không hợp lệ.");
+        }
+        if (req.getPriceVnd() == null || req.getPriceVnd() < 0) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Giá (priceVnd) không hợp lệ.");
+        }
+        String code = req.getCode().trim().toUpperCase();
+        if (planRepository.existsByCode(code)) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Code đã tồn tại: " + code);
+        }
+        Plan p = Plan.builder()
+                .code(code)
+                .name(req.getName().trim())
+                .quotaBytes(req.getQuotaBytes())
+                .priceVnd(req.getPriceVnd())
+                .description(req.getDescription())
+                .build();
+        return planRepository.save(p);
+    }
+
+    @Override
+    @Transactional
+    public Plan updatePlan(Long planId, PlanAdminRequest req) {
+        Plan p = planRepository.findById(planId)
+                .orElseThrow(() -> new CustomException(ErrorCode.PLAN_NOT_FOUND));
+
+        if (req.getName() != null && !req.getName().isBlank()) p.setName(req.getName().trim());
+        if (req.getQuotaBytes() != null) {
+            if (req.getQuotaBytes() < 0) {
+                throw new CustomException(ErrorCode.BAD_REQUEST, "Dung lượng không hợp lệ.");
+            }
+            p.setQuotaBytes(req.getQuotaBytes());
+        }
+        if (req.getPriceVnd() != null) {
+            if (req.getPriceVnd() < 0) {
+                throw new CustomException(ErrorCode.BAD_REQUEST, "Giá không hợp lệ.");
+            }
+            p.setPriceVnd(req.getPriceVnd());
+        }
+        if (req.getDescription() != null) p.setDescription(req.getDescription());
+        // Code is immutable post-create — silently ignored if provided.
+        return planRepository.save(p);
+    }
+
+    @Override
+    @Transactional
+    public void deletePlan(Long planId) {
+        Plan p = planRepository.findById(planId)
+                .orElseThrow(() -> new CustomException(ErrorCode.PLAN_NOT_FOUND));
+
+        long usersOnPlan = ((Number) em.createQuery(
+                "SELECT COUNT(u) FROM User u WHERE u.plan.id = :pid")
+                .setParameter("pid", planId)
+                .getSingleResult()).longValue();
+        if (usersOnPlan > 0) {
+            throw new CustomException(ErrorCode.BAD_REQUEST,
+                    "Không thể xoá: " + usersOnPlan + " user đang dùng gói này. Đổi user sang gói khác trước.");
+        }
+        long groupsOnPlan = ((Number) em.createQuery(
+                "SELECT COUNT(g) FROM Group g WHERE g.plan.id = :pid")
+                .setParameter("pid", planId)
+                .getSingleResult()).longValue();
+        if (groupsOnPlan > 0) {
+            throw new CustomException(ErrorCode.BAD_REQUEST,
+                    "Không thể xoá: " + groupsOnPlan + " nhóm đang dùng gói này.");
+        }
+        planRepository.delete(p);
+    }
+
+    // ── Addon management ──────────────────────────────────────────────────────
+
+    @Override
+    public List<StorageAddon> listAddons() {
+        return storageAddonRepository.findAllByOrderByPriceVndAsc();
+    }
+
+    @Override
+    @Transactional
+    public StorageAddon createAddon(AddonAdminRequest req) {
+        if (req.getCode() == null || req.getCode().isBlank()) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Code không được để trống.");
+        }
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Tên addon không được để trống.");
+        }
+        if (req.getExtraBytes() == null || req.getExtraBytes() <= 0) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Dung lượng (extraBytes) phải > 0.");
+        }
+        if (req.getPriceVnd() == null || req.getPriceVnd() < 0) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Giá không hợp lệ.");
+        }
+        String code = req.getCode().trim().toUpperCase();
+        if (storageAddonRepository.existsByCode(code)) {
+            throw new CustomException(ErrorCode.BAD_REQUEST, "Code đã tồn tại: " + code);
+        }
+        StorageAddon a = StorageAddon.builder()
+                .code(code)
+                .name(req.getName().trim())
+                .extraBytes(req.getExtraBytes())
+                .priceVnd(req.getPriceVnd())
+                .description(req.getDescription())
+                .build();
+        return storageAddonRepository.save(a);
+    }
+
+    @Override
+    @Transactional
+    public StorageAddon updateAddon(Long addonId, AddonAdminRequest req) {
+        StorageAddon a = storageAddonRepository.findById(addonId)
+                .orElseThrow(() -> new CustomException(ErrorCode.BAD_REQUEST, "Addon không tồn tại"));
+
+        if (req.getName() != null && !req.getName().isBlank()) a.setName(req.getName().trim());
+        if (req.getExtraBytes() != null) {
+            if (req.getExtraBytes() <= 0) {
+                throw new CustomException(ErrorCode.BAD_REQUEST, "Dung lượng phải > 0.");
+            }
+            a.setExtraBytes(req.getExtraBytes());
+        }
+        if (req.getPriceVnd() != null) {
+            if (req.getPriceVnd() < 0) {
+                throw new CustomException(ErrorCode.BAD_REQUEST, "Giá không hợp lệ.");
+            }
+            a.setPriceVnd(req.getPriceVnd());
+        }
+        if (req.getDescription() != null) a.setDescription(req.getDescription());
+        return storageAddonRepository.save(a);
+    }
+
+    @Override
+    @Transactional
+    public void deleteAddon(Long addonId) {
+        StorageAddon a = storageAddonRepository.findById(addonId)
+                .orElseThrow(() -> new CustomException(ErrorCode.BAD_REQUEST, "Addon không tồn tại"));
+        // Addon references aren't enforced by FK (Payment.addon_code is a free
+        // string), so a hard delete is safe — historical payments retain the
+        // string code without breaking integrity.
+        storageAddonRepository.delete(a);
     }
 
     private AdminUserSummary toSummary(User user) {
