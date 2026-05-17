@@ -134,6 +134,12 @@ public class AuthServiceImpl implements AuthService {
             throw new CustomException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
+        // Block refresh khi tài khoản đã bị admin hệ thống vô hiệu hoá
+        if (!Boolean.TRUE.equals(user.getIsActive())) {
+            log.warn("Token refresh blocked for inactive user: {}", email);
+            throw new CustomException(ErrorCode.USER_NOT_ACTIVE);
+        }
+
         // Tạo UserInfo
         AuthResponse.UserInfo userInfo = buildUserInfo(user);
 
@@ -297,6 +303,12 @@ public class AuthServiceImpl implements AuthService {
                 log.info("Linked Firebase provider for existing user: {} ({})", email, provider);
             }
 
+            // Block login khi tài khoản đã bị admin hệ thống vô hiệu hoá
+            if (!Boolean.TRUE.equals(user.getIsActive())) {
+                log.warn("Firebase login blocked for inactive user: {}", email);
+                throw new CustomException(ErrorCode.USER_NOT_ACTIVE);
+            }
+
             // Tạo JWT giống login thường
             AuthResponse.UserInfo userInfo = buildUserInfo(user);
             AuthResponse authResponse = new AuthResponse();
@@ -313,6 +325,10 @@ public class AuthServiceImpl implements AuthService {
             authResponse.setTokenType("Bearer");
 
             return authResponse;
+        } catch (CustomException e) {
+            // Surface our domain errors (USER_NOT_ACTIVE, etc.) without
+            // disguising them as INVALID_CREDENTIALS.
+            throw e;
         } catch (Exception e) {
             log.error("Firebase login failed: {}", e.getMessage());
             throw new CustomException(ErrorCode.INVALID_CREDENTIALS,
