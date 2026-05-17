@@ -18,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -138,7 +137,7 @@ public class AdminServiceImpl implements AdminService {
         Map<String, Long> byDate = new HashMap<>();
         for (Object row : rows) {
             Object[] cols = (Object[]) row;
-            byDate.put(((Date) cols[0]).toLocalDate().toString(),
+            byDate.put(toLocalDate(cols[0]).toString(),
                     ((Number) cols[1]).longValue());
         }
         return fillDailyGaps(from, 30, byDate);
@@ -158,7 +157,7 @@ public class AdminServiceImpl implements AdminService {
         Map<String, Long> byDate = new HashMap<>();
         for (Object row : rows) {
             Object[] cols = (Object[]) row;
-            byDate.put(((Date) cols[0]).toLocalDate().toString(),
+            byDate.put(toLocalDate(cols[0]).toString(),
                     ((Number) cols[1]).longValue());
         }
         return fillDailyGaps(from, 30, byDate);
@@ -234,6 +233,21 @@ public class AdminServiceImpl implements AdminService {
                     .build());
         }
         return out;
+    }
+
+    /**
+     * Hibernate may return either java.sql.Date or LocalDate for a Postgres
+     * DATE column depending on driver/dialect/Hibernate version. Accept both
+     * so the native query rows don't ClassCastException at runtime.
+     */
+    private LocalDate toLocalDate(Object value) {
+        if (value == null) return null;
+        if (value instanceof LocalDate ld) return ld;
+        if (value instanceof java.sql.Date sd) return sd.toLocalDate();
+        if (value instanceof java.util.Date d) {
+            return d.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        }
+        return LocalDate.parse(value.toString());
     }
 
     private List<DailyPoint> fillDailyGaps(LocalDate from, int days, Map<String, Long> byDate) {
