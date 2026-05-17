@@ -165,6 +165,31 @@ public class GroupServiceImpl implements GroupService {
         log.info("Group {} deleted by user {}", groupId, userId);
     }
 
+    @Override
+    public void adminDeleteGroup(Long groupId) {
+        log.info("Admin deleting group {}", groupId);
+
+        Group group = getGroupEntityById(groupId);
+
+        // Same cascade as user-facing deleteGroup, just without the owner check.
+        documentRepository.findByGroupId(groupId)
+                .forEach(doc -> {
+                    try { fileStorageService.deleteFile(doc.getFileUrl()); } catch (Exception e) { /* ignore */ }
+                    documentRepository.delete(doc);
+                });
+        groupFolderRepository.findByGroupId(groupId)
+                .forEach(groupFolderRepository::delete);
+        joinRequestRepository.findByGroupIdAndStatus(groupId, JoinRequestStatus.PENDING)
+                .forEach(joinRequestRepository::delete);
+        groupBanRepository.findByGroupIdAndActiveTrue(groupId)
+                .forEach(ban -> { ban.setActive(false); groupBanRepository.save(ban); });
+        groupMemberRepository.findByGroupId(groupId)
+                .forEach(groupMemberRepository::delete);
+        groupRepository.delete(group);
+
+        log.info("Group {} deleted by admin", groupId);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Truy vấn nhóm
     // ─────────────────────────────────────────────────────────────────────────

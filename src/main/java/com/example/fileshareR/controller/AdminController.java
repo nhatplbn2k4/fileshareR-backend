@@ -7,6 +7,7 @@ import com.example.fileshareR.dto.request.AdminUpdateUserRequest;
 import com.example.fileshareR.dto.request.PlanAdminRequest;
 import com.example.fileshareR.dto.response.AdminChartsResponse;
 import com.example.fileshareR.dto.response.AdminDocumentSummary;
+import com.example.fileshareR.dto.response.AdminGroupSummary;
 import com.example.fileshareR.dto.response.AdminPaymentSummary;
 import com.example.fileshareR.dto.response.AdminStatsResponse;
 import com.example.fileshareR.dto.response.AdminUserSummary;
@@ -14,6 +15,7 @@ import com.example.fileshareR.entity.Plan;
 import com.example.fileshareR.entity.StorageAddon;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.FileType;
+import com.example.fileshareR.enums.GroupVisibilityType;
 import com.example.fileshareR.enums.PaymentProvider;
 import com.example.fileshareR.enums.PaymentStatus;
 import com.example.fileshareR.enums.VisibilityType;
@@ -177,6 +179,26 @@ public class AdminController {
     @GetMapping("/payments/{paymentId}")
     public ResponseEntity<AdminPaymentSummary> getPayment(@PathVariable Long paymentId) {
         return ResponseEntity.ok(adminService.getPayment(paymentId));
+    }
+
+    // ── Group management ──────────────────────────────────────────────────────
+
+    @GetMapping("/groups")
+    public ResponseEntity<Page<AdminGroupSummary>> listGroups(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) GroupVisibilityType visibility,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort) {
+        return ResponseEntity.ok(adminService.listGroups(
+                search, visibility,
+                PageRequest.of(page, size, parseSort(sort))));
+    }
+
+    @DeleteMapping("/groups/{groupId}")
+    public ResponseEntity<Void> deleteGroup(@PathVariable Long groupId) {
+        adminService.deleteGroup(groupId);
+        return ResponseEntity.noContent().build();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
