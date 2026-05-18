@@ -23,5 +23,8 @@ public enum NotificationType {
     PLATFORM_ADDON_PURCHASED,     // A user / group owner bought a storage add-on
 
     // Group-owner facing (popup-realtime)
-    GROUP_DELETED_BY_PLATFORM     // Platform admin deleted/banned this group
+    GROUP_DELETED_BY_PLATFORM,    // Platform admin deleted/banned this group
+
+    // Platform-admin facing — plagiarism detection
+    PLAGIARISM_REPORT             // System detected possible plagiarism, admin needs to review
 }

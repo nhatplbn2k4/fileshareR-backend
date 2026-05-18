@@ -11,6 +11,7 @@ import com.example.fileshareR.enums.FolderVisibilityType;
 import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.FolderRepository;
 import com.example.fileshareR.service.FolderService;
+import com.example.fileshareR.service.PlagiarismService;
 import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class FolderServiceImpl implements FolderService {
     private final UserService userService;
     private final DocumentRepository documentRepository;
     private final StorageQuotaService storageQuotaService;
+    private final PlagiarismService plagiarismService;
 
     @Override
     public FolderResponse createFolder(CreateFolderRequest request, Long userId) {
@@ -146,8 +148,21 @@ public class FolderServiceImpl implements FolderService {
         folder.setName(request.getName());
 
         // Cập nhật visibility (cascade xuống toàn bộ cây con)
-        if (request.getVisibility() != null && request.getVisibility() != folder.getVisibility()) {
-            applyVisibilityCascade(folder, request.getVisibility());
+        FolderVisibilityType oldVisibility = folder.getVisibility();
+        FolderVisibilityType newVisibility = request.getVisibility();
+        if (newVisibility != null && newVisibility != oldVisibility) {
+            applyVisibilityCascade(folder, newVisibility);
+
+            // Trigger plagiarism scan khi folder chuyển TỪ PRIVATE → PUBLIC/LINK_ONLY
+            if (oldVisibility == FolderVisibilityType.PRIVATE
+                    && newVisibility != FolderVisibilityType.PRIVATE) {
+                try {
+                    plagiarismService.checkFolderTreeAsync(folder.getId());
+                } catch (Exception e) {
+                    log.warn("Plagiarism trigger failed (best-effort) for folder {}: {}",
+                            folder.getId(), e.getMessage());
+                }
+            }
         }
 
         // Cập nhật parent folder nếu có
