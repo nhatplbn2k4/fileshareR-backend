@@ -85,9 +85,6 @@ public class PlagiarismCheckExecutor {
                     .findByDocument1IdAndDocument2Id(documentId, m.matchedDocumentId())
                     .orElse(null);
             if (existing == null) {
-                // Load managed Document for FK target — getReferenceById can return
-                // a proxy mà Hibernate đôi khi không sync state khi flush →
-                // dùng findById để chắc chắn doc có trong session hiện tại.
                 Document matched = documentRepository.findById(m.matchedDocumentId()).orElse(null);
                 if (matched == null) continue;
                 DocumentSimilarity row = DocumentSimilarity.builder()
@@ -100,11 +97,31 @@ public class PlagiarismCheckExecutor {
                         .build();
                 similarityRepository.save(row);
                 newRowCount++;
-            } else if (existing.getStatus() == PlagiarismStatus.PENDING) {
-                if (existing.getSimilarityScore() == null
-                        || existing.getSimilarityScore() < m.similarityScore()) {
+            } else {
+                PlagiarismStatus oldStatus = existing.getStatus();
+                if (oldStatus == PlagiarismStatus.RESOLVED_KEPT
+                        || oldStatus == PlagiarismStatus.IGNORED) {
+                    // Admin đã đánh dấu cặp này không phải đạo văn — không reopen.
+                    continue;
+                }
+                if (oldStatus == PlagiarismStatus.PENDING) {
+                    if (existing.getSimilarityScore() == null
+                            || existing.getSimilarityScore() < m.similarityScore()) {
+                        existing.setSimilarityScore((float) m.similarityScore());
+                        similarityRepository.save(existing);
+                    }
+                } else {
+                    // RESOLVED_PRIVATIZED (hoặc REMOVED leak): doc đã chuyển công khai trở lại
+                    // → reopen về PENDING + xóa thông tin xử lý cũ + treat as new evidence.
+                    existing.setStatus(PlagiarismStatus.PENDING);
                     existing.setSimilarityScore((float) m.similarityScore());
+                    existing.setTriggerType(trigger);
+                    existing.setTriggerContextId(triggerContextId);
+                    existing.setResolvedBy(null);
+                    existing.setResolvedAt(null);
+                    existing.setResolutionNote(null);
                     similarityRepository.save(existing);
+                    newRowCount++;
                 }
             }
             maxScore = Math.max(maxScore, m.similarityScore());
