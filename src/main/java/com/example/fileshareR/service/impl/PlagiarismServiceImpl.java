@@ -159,7 +159,7 @@ public class PlagiarismServiceImpl implements PlagiarismService {
         }
 
         switch (action) {
-            case REMOVE -> handleRemove(doc, docOwner, docTitle);
+            case REMOVE -> handleRemove(doc, docOwner, docTitle, rows);
             case PRIVATIZE -> handlePrivatize(doc, docOwner, docTitle);
             case KEEP -> log.info("Plagiarism report kept (false positive) for doc {}", suspectedDocId);
             case IGNORE -> log.info("Plagiarism report ignored for doc {}", suspectedDocId);
@@ -173,9 +173,10 @@ public class PlagiarismServiceImpl implements PlagiarismService {
         return buildDetail(doc, rows);
     }
 
-    private void handleRemove(Document doc, User owner, String docTitle) {
+    private void handleRemove(Document doc, User owner, String docTitle,
+                              List<DocumentSimilarity> rowsInSession) {
         if (owner == null) {
-            documentService.adminDeleteDocument(doc.getId());
+            evictRowsAndDeleteDoc(rowsInSession, doc.getId());
             return;
         }
         // Tăng warning counter
@@ -190,8 +191,7 @@ public class PlagiarismServiceImpl implements PlagiarismService {
         }
         userRepository.save(owner);
 
-        // FK document_similarities → documents có ON DELETE CASCADE → tự xóa rows.
-        documentService.adminDeleteDocument(doc.getId());
+        evictRowsAndDeleteDoc(rowsInSession, doc.getId());
 
         // Notify owner
         String warnMsg = String.format(
@@ -212,6 +212,21 @@ public class PlagiarismServiceImpl implements PlagiarismService {
         } catch (Exception e) {
             log.warn("Failed to notify owner after REMOVE: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Tell Hibernate session about the DocumentSimilarity DELETEs BEFORE the
+     * Document DELETE — otherwise flush sees managed rows referencing a
+     * to-be-removed Document and throws TransientPropertyValueException.
+     * DB-level FK CASCADE alone is not enough; Hibernate's session integrity
+     * check happens before the DB sees the cascade.
+     */
+    private void evictRowsAndDeleteDoc(List<DocumentSimilarity> rowsInSession, Long docId) {
+        if (rowsInSession != null && !rowsInSession.isEmpty()) {
+            similarityRepository.deleteAll(rowsInSession);
+            similarityRepository.flush();
+        }
+        documentService.adminDeleteDocument(docId);
     }
 
     private void handlePrivatize(Document doc, User owner, String docTitle) {
