@@ -52,7 +52,8 @@ public class PlagiarismServiceImpl implements PlagiarismService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final DocumentService documentService;
-    private final List<PlagiarismSourceProvider> providers;
+    /** Tách bean riêng để @Transactional hoạt động khi gọi từ @Async (qua Spring proxy). */
+    private final PlagiarismCheckExecutor checkExecutor;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -60,25 +61,18 @@ public class PlagiarismServiceImpl implements PlagiarismService {
     @Value("${plagiarism.enabled:true}")
     private boolean enabled;
 
-    @Value("${plagiarism.similarity-threshold:0.7}")
-    private double threshold;
-
-    @Value("${plagiarism.max-matches:10}")
-    private int maxMatches;
-
     @Value("${plagiarism.auto-ban-threshold:3}")
     private int autoBanThreshold;
 
     @Override
     @Async("plagiarismExecutor")
-    @Transactional
     public void checkDocumentAsync(Long documentId, PlagiarismTriggerType trigger, Long triggerContextId) {
         if (!enabled) {
             log.info("Plagiarism check disabled, skip doc {}", documentId);
             return;
         }
         try {
-            checkDocumentInternal(documentId, trigger, triggerContextId);
+            checkExecutor.checkDocument(documentId, trigger, triggerContextId);
         } catch (Exception e) {
             log.error("Plagiarism check failed for doc {}: {}", documentId, e.getMessage(), e);
         }
@@ -86,120 +80,23 @@ public class PlagiarismServiceImpl implements PlagiarismService {
 
     @Override
     @Async("plagiarismExecutor")
-    @Transactional
     public void checkFolderTreeAsync(Long folderId) {
         if (!enabled) {
             log.info("Plagiarism check disabled, skip folder {}", folderId);
             return;
         }
         try {
-            // BFS folder tree, collect all doc IDs
             List<Long> docIds = collectDocsInFolderTree(folderId);
             log.info("Plagiarism: folder tree {} → {} docs to scan", folderId, docIds.size());
             for (Long docId : docIds) {
                 try {
-                    checkDocumentInternal(docId, PlagiarismTriggerType.FOLDER_PUBLIC, folderId);
+                    checkExecutor.checkDocument(docId, PlagiarismTriggerType.FOLDER_PUBLIC, folderId);
                 } catch (Exception e) {
                     log.warn("Plagiarism check skipped doc {} in folder tree: {}", docId, e.getMessage());
                 }
             }
         } catch (Exception e) {
             log.error("Plagiarism folder tree scan failed for folder {}: {}", folderId, e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Sync internal — gọi từ async wrapper hoặc loop folder tree.
-     */
-    private void checkDocumentInternal(Long documentId, PlagiarismTriggerType trigger, Long triggerContextId) {
-        Document doc = documentRepository.findById(documentId).orElse(null);
-        if (doc == null) {
-            log.info("Plagiarism: doc {} not found, skip", documentId);
-            return;
-        }
-
-        // Aggregate matches từ tất cả providers active
-        List<PlagiarismMatch> allMatches = new ArrayList<>();
-        for (PlagiarismSourceProvider p : providers) {
-            if (!p.isEnabled()) continue;
-            try {
-                List<PlagiarismMatch> m = p.findMatches(doc, threshold, maxMatches);
-                log.info("Plagiarism: provider '{}' returned {} matches for doc {}",
-                        p.getName(), m.size(), documentId);
-                allMatches.addAll(m);
-            } catch (Exception e) {
-                log.warn("Plagiarism: provider '{}' failed for doc {}: {}",
-                        p.getName(), documentId, e.getMessage());
-            }
-        }
-
-        if (allMatches.isEmpty()) {
-            log.info("Plagiarism: doc {} clean (no matches above {})", documentId, threshold);
-            return;
-        }
-
-        // Sort + limit top N
-        List<PlagiarismMatch> topMatches = allMatches.stream()
-                .sorted(Comparator.comparingDouble(PlagiarismMatch::similarityScore).reversed())
-                .limit(maxMatches)
-                .toList();
-
-        // Dedup: nếu đã có row PENDING cho doc này → chỉ upsert thêm, không gửi notification mới.
-        boolean isNewReport = similarityRepository.countByDocument1IdAndStatus(
-                documentId, PlagiarismStatus.PENDING) == 0;
-
-        double maxScore = 0;
-        int newRowCount = 0;
-        for (PlagiarismMatch m : topMatches) {
-            if (m.matchedDocumentId() == null) continue; // external — chưa hỗ trợ persist
-            DocumentSimilarity existing = similarityRepository
-                    .findByDocument1IdAndDocument2Id(documentId, m.matchedDocumentId())
-                    .orElse(null);
-            if (existing == null) {
-                Document matched = documentRepository.getReferenceById(m.matchedDocumentId());
-                DocumentSimilarity row = DocumentSimilarity.builder()
-                        .document1(doc)
-                        .document2(matched)
-                        .similarityScore((float) m.similarityScore())
-                        .triggerType(trigger)
-                        .triggerContextId(triggerContextId)
-                        .status(PlagiarismStatus.PENDING)
-                        .build();
-                similarityRepository.save(row);
-                newRowCount++;
-            } else if (existing.getStatus() == PlagiarismStatus.PENDING) {
-                // refresh score nếu cao hơn
-                if (existing.getSimilarityScore() == null
-                        || existing.getSimilarityScore() < m.similarityScore()) {
-                    existing.setSimilarityScore((float) m.similarityScore());
-                    similarityRepository.save(existing);
-                }
-            }
-            maxScore = Math.max(maxScore, m.similarityScore());
-        }
-
-        log.info("Plagiarism: doc {} -> {} new rows (isNewReport={}, maxScore={})",
-                documentId, newRowCount, isNewReport, maxScore);
-
-        // Chỉ gửi notification 1 lần / report mới
-        if (isNewReport && newRowCount > 0) {
-            String ownerEmail = doc.getUser() != null ? doc.getUser().getEmail() : "?";
-            String triggerLabel = trigger == PlagiarismTriggerType.FOLDER_PUBLIC
-                    ? "Folder public hóa"
-                    : "Upload vào nhóm công khai";
-            String message = String.format(
-                    "Nghi đạo văn: \"%s\" của %s (max score %.2f, %d matches). Trigger: %s.",
-                    doc.getTitle(), ownerEmail, maxScore, newRowCount, triggerLabel);
-            try {
-                notificationService.notifyAllAdmins(
-                        NotificationType.PLAGIARISM_REPORT,
-                        "Cảnh báo đạo văn",
-                        message,
-                        documentId,
-                        "/admin/plagiarism/" + documentId);
-            } catch (Exception e) {
-                log.warn("Plagiarism: failed to notify admins (best-effort): {}", e.getMessage());
-            }
         }
     }
 
