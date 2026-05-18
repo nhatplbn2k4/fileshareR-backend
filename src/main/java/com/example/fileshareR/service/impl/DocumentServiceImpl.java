@@ -36,6 +36,8 @@ import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.TextExtractionService;
 import com.example.fileshareR.service.UserService;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -178,14 +180,34 @@ public class DocumentServiceImpl implements DocumentService {
      */
     private void triggerPlagiarismIfPublic(Document document) {
         if (!isDocOrFolderPublic(document)) return;
-        try {
-            Long contextId = document.getFolder() != null ? document.getFolder().getId() : null;
-            plagiarismServiceProvider.getObject()
-                    .checkDocumentAsync(document.getId(),
-                            PlagiarismTriggerType.FOLDER_PUBLIC, contextId);
-        } catch (Exception e) {
-            log.warn("Plagiarism trigger failed for personal doc {}: {}",
-                    document.getId(), e.getMessage());
+        Long docId = document.getId();
+        Long contextId = document.getFolder() != null ? document.getFolder().getId() : null;
+        runAfterCommit(() -> {
+            try {
+                plagiarismServiceProvider.getObject()
+                        .checkDocumentAsync(docId, PlagiarismTriggerType.FOLDER_PUBLIC, contextId);
+            } catch (Exception e) {
+                log.warn("Plagiarism trigger failed for personal doc {}: {}",
+                        docId, e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Chạy task SAU khi outer transaction commit, để async @Async không gặp race
+     * (findById trong async thread sẽ thấy data đã COMMIT). Nếu không có tx
+     * active, chạy ngay.
+     */
+    private void runAfterCommit(Runnable task) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+        } else {
+            task.run();
         }
     }
 
@@ -820,16 +842,20 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
-        // Plagiarism check khi upload vào nhóm công khai (async, best-effort)
+        // Plagiarism check khi upload vào nhóm công khai (defer đến sau commit để
+        // async thread thấy doc đã persist).
         if (group.getVisibility() == GroupVisibilityType.PUBLIC) {
-            try {
-                plagiarismServiceProvider.getObject()
-                        .checkDocumentAsync(document.getId(),
-                                PlagiarismTriggerType.GROUP_PUBLIC_UPLOAD, groupId);
-            } catch (Exception e) {
-                log.warn("Plagiarism trigger failed for group {} doc {}: {}",
-                        groupId, document.getId(), e.getMessage());
-            }
+            Long docId = document.getId();
+            runAfterCommit(() -> {
+                try {
+                    plagiarismServiceProvider.getObject()
+                            .checkDocumentAsync(docId,
+                                    PlagiarismTriggerType.GROUP_PUBLIC_UPLOAD, groupId);
+                } catch (Exception e) {
+                    log.warn("Plagiarism trigger failed for group {} doc {}: {}",
+                            groupId, docId, e.getMessage());
+                }
+            });
         }
 
         return mapToResponse(document);

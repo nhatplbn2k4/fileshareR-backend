@@ -21,6 +21,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -153,14 +155,26 @@ public class FolderServiceImpl implements FolderService {
         if (newVisibility != null && newVisibility != oldVisibility) {
             applyVisibilityCascade(folder, newVisibility);
 
-            // Trigger plagiarism scan khi folder chuyển TỪ PRIVATE → PUBLIC/LINK_ONLY
+            // Trigger plagiarism scan khi folder chuyển TỪ PRIVATE → PUBLIC/LINK_ONLY.
+            // Defer đến sau commit để async thread thấy folder + docs đã cập nhật.
             if (oldVisibility == FolderVisibilityType.PRIVATE
                     && newVisibility != FolderVisibilityType.PRIVATE) {
-                try {
-                    plagiarismService.checkFolderTreeAsync(folder.getId());
-                } catch (Exception e) {
-                    log.warn("Plagiarism trigger failed (best-effort) for folder {}: {}",
-                            folder.getId(), e.getMessage());
+                Long fid = folder.getId();
+                Runnable task = () -> {
+                    try {
+                        plagiarismService.checkFolderTreeAsync(fid);
+                    } catch (Exception e) {
+                        log.warn("Plagiarism trigger failed (best-effort) for folder {}: {}",
+                                fid, e.getMessage());
+                    }
+                };
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(
+                            new TransactionSynchronization() {
+                                @Override public void afterCommit() { task.run(); }
+                            });
+                } else {
+                    task.run();
                 }
             }
         }
