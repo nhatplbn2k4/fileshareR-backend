@@ -144,16 +144,19 @@ public class PlagiarismServiceImpl implements PlagiarismService {
         User docOwner = doc.getUser();
         String docTitle = doc.getTitle();
 
-        // Cập nhật status các evidence rows (cùng suspected doc) — làm trước action chính
-        // để dữ liệu nhất quán kể cả khi action sau lỗi.
         LocalDateTime now = LocalDateTime.now();
-        for (DocumentSimilarity row : rows) {
-            row.setStatus(newStatus);
-            row.setResolvedBy(admin);
-            row.setResolvedAt(now);
-            row.setResolutionNote(req.getNote());
+
+        // Với REMOVE: không update rows trước (CASCADE sẽ xóa khi doc bị xóa).
+        // Với các action khác: persist status workflow.
+        if (action != ResolvePlagiarismRequest.Action.REMOVE) {
+            for (DocumentSimilarity row : rows) {
+                row.setStatus(newStatus);
+                row.setResolvedBy(admin);
+                row.setResolvedAt(now);
+                row.setResolutionNote(req.getNote());
+            }
+            similarityRepository.saveAll(rows);
         }
-        similarityRepository.saveAll(rows);
 
         switch (action) {
             case REMOVE -> handleRemove(doc, docOwner, docTitle);
@@ -187,11 +190,7 @@ public class PlagiarismServiceImpl implements PlagiarismService {
         }
         userRepository.save(owner);
 
-        // Xóa evidence rows trỏ tới doc TRƯỚC khi xóa doc để tránh FK violation
-        similarityRepository.deleteByDocument1IdOrDocument2Id(doc.getId());
-        entityManager.flush();
-
-        // Delete doc (file + DB) — adminDeleteDocument đã có
+        // FK document_similarities → documents có ON DELETE CASCADE → tự xóa rows.
         documentService.adminDeleteDocument(doc.getId());
 
         // Notify owner

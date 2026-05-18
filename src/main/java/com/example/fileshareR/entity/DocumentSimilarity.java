@@ -4,6 +4,8 @@ import com.example.fileshareR.enums.PlagiarismStatus;
 import com.example.fileshareR.enums.PlagiarismTriggerType;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.LocalDateTime;
 
@@ -25,11 +27,13 @@ public class DocumentSimilarity {
     /** Tài liệu nghi đạo văn (suspected) — trigger scan. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "document_id_1", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Document document1;
 
     /** Tài liệu gốc bị nghi đã copy (matched). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "document_id_2", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Document document2;
 
     @Column(name = "similarity_score", nullable = false)
