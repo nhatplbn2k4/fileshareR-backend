@@ -167,7 +167,33 @@ public class DocumentServiceImpl implements DocumentService {
         storageQuotaService.incrementUserUsage(user, fileSize);
         log.info("Document uploaded successfully with id: {}", document.getId());
 
+        triggerPlagiarismIfPublic(document);
+
         return mapToResponse(document);
+    }
+
+    /**
+     * Trigger plagiarism scan khi tài liệu cá nhân vừa được upload mà đang ở trạng
+     * thái "có thể public" (visibility=PUBLIC, hoặc nằm trong folder PUBLIC/LINK_ONLY).
+     */
+    private void triggerPlagiarismIfPublic(Document document) {
+        if (!isDocOrFolderPublic(document)) return;
+        try {
+            Long contextId = document.getFolder() != null ? document.getFolder().getId() : null;
+            plagiarismServiceProvider.getObject()
+                    .checkDocumentAsync(document.getId(),
+                            PlagiarismTriggerType.FOLDER_PUBLIC, contextId);
+        } catch (Exception e) {
+            log.warn("Plagiarism trigger failed for personal doc {}: {}",
+                    document.getId(), e.getMessage());
+        }
+    }
+
+    private boolean isDocOrFolderPublic(Document doc) {
+        if (doc.getVisibility() == com.example.fileshareR.enums.VisibilityType.PUBLIC) return true;
+        return doc.getFolder() != null
+                && doc.getFolder().getVisibility() != null
+                && doc.getFolder().getVisibility() != FolderVisibilityType.PRIVATE;
     }
 
     @Override
@@ -241,6 +267,9 @@ public class DocumentServiceImpl implements DocumentService {
             throw new CustomException(ErrorCode.DOCUMENT_ACCESS_DENIED);
         }
 
+        // Snapshot trạng thái "đang public" trước khi update để biết có cần trigger scan không.
+        boolean wasPublic = isDocOrFolderPublic(document);
+
         // Cập nhật title
         document.setTitle(request.getTitle());
 
@@ -266,6 +295,12 @@ public class DocumentServiceImpl implements DocumentService {
 
         document = documentRepository.save(document);
         log.info("Document updated successfully: {}", documentId);
+
+        // Nếu doc vừa chuyển từ private → public (qua visibility hoặc qua move folder) → scan
+        boolean nowPublic = isDocOrFolderPublic(document);
+        if (!wasPublic && nowPublic) {
+            triggerPlagiarismIfPublic(document);
+        }
 
         return mapToResponse(document);
     }
