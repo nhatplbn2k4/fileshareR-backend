@@ -25,14 +25,17 @@ import com.example.fileshareR.repository.GroupBanRepository;
 import com.example.fileshareR.repository.GroupFolderRepository;
 import com.example.fileshareR.repository.GroupMemberRepository;
 import com.example.fileshareR.repository.GroupRepository;
+import com.example.fileshareR.enums.PlagiarismTriggerType;
 import com.example.fileshareR.service.ContentModerationService;
 import com.example.fileshareR.service.DocumentService;
 import com.example.fileshareR.service.FileStorageService;
 import com.example.fileshareR.service.NlpService;
 import com.example.fileshareR.service.NotificationService;
+import com.example.fileshareR.service.PlagiarismService;
 import com.example.fileshareR.service.StorageQuotaService;
 import com.example.fileshareR.service.TextExtractionService;
 import com.example.fileshareR.service.UserService;
+import org.springframework.beans.factory.ObjectProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +72,8 @@ public class DocumentServiceImpl implements DocumentService {
     private final StorageQuotaService storageQuotaService;
     private final ContentModerationService contentModerationService;
     private final NotificationService notificationService;
+    /** Lazy provider để tránh circular dependency với PlagiarismService (cần DocumentService cho REMOVE flow). */
+    private final ObjectProvider<PlagiarismService> plagiarismServiceProvider;
 
     private static final int TOP_KEYWORDS_COUNT = 10;
     private static final int SUMMARY_MAX_WORDS = 50; // Tối đa 50 từ cho summary ngắn gọn
@@ -777,6 +782,18 @@ public class DocumentServiceImpl implements DocumentService {
                                 + document.getTitle() + "\" cần admin duyệt.",
                         document.getId(),
                         "/groups/" + groupId);
+            }
+        }
+
+        // Plagiarism check khi upload vào nhóm công khai (async, best-effort)
+        if (group.getVisibility() == GroupVisibilityType.PUBLIC) {
+            try {
+                plagiarismServiceProvider.getObject()
+                        .checkDocumentAsync(document.getId(),
+                                PlagiarismTriggerType.GROUP_PUBLIC_UPLOAD, groupId);
+            } catch (Exception e) {
+                log.warn("Plagiarism trigger failed for group {} doc {}: {}",
+                        groupId, document.getId(), e.getMessage());
             }
         }
 

@@ -63,4 +63,10 @@ public class User extends BaseEntity {
     @Column(name = "storage_used", nullable = false, columnDefinition = "bigint not null default 0")
     @Builder.Default
     private Long storageUsed = 0L;
+
+    /** Số lần admin đã xử lý REMOVE doc của user do nghi đạo văn. Vượt ngưỡng → tự động ban. */
+    @Column(name = "plagiarism_warning_count", nullable = false,
+            columnDefinition = "integer not null default 0")
+    @Builder.Default
+    private Integer plagiarismWarningCount = 0;
 }

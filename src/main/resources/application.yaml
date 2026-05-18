@@ -128,6 +128,21 @@ payment:
     request-type: captureWallet
     lang: vi
 
+# Plagiarism detection (đạo văn)
+# Trigger khi: folder PRIVATE→PUBLIC, hoặc upload doc vào group PUBLIC.
+# So sánh cosine TF-IDF với tài liệu khác (loại trừ doc của chính chủ).
+plagiarism:
+  enabled: ${PLAGIARISM_ENABLED:true}
+  # Ngưỡng cosine 0-1 để flag PENDING (0.7 = strict, ít false positive)
+  similarity-threshold: ${PLAGIARISM_THRESHOLD:0.7}
+  # Top-N matches lưu vào report
+  max-matches: ${PLAGIARISM_MAX_MATCHES:10}
+  # Số lần admin REMOVE doc trước khi auto-ban user
+  auto-ban-threshold: ${PLAGIARISM_AUTO_BAN_THRESHOLD:3}
+  providers:
+    internal:
+      enabled: ${PLAGIARISM_INTERNAL_ENABLED:true}
+
 # Logging
 logging:
   level:
