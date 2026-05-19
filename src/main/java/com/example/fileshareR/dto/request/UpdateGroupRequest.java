@@ -25,6 +25,10 @@ public class UpdateGroupRequest {
 
     private String avatarUrl;
 
+    private String coverImageUrl;
+
+    private Long coverPresetId;
+
     private Boolean requireApproval;
 
     private List<String> joinQuestions;

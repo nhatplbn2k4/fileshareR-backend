@@ -22,6 +22,7 @@ public class GroupResponse {
     private Long ownerId;
     private String ownerName;
     private String avatarUrl;
+    private String coverImageUrl;
     private Long memberCount;
     private Boolean isMember;       // user hiện tại có là thành viên không
     private GroupMemberRole myRole; // vai trò của user hiện tại (null nếu không là thành viên)
