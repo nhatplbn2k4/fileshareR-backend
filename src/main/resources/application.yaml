@@ -89,7 +89,7 @@ gemini:
   api:
     key: ${GEMINI_API_KEY:}
     url: https://generativelanguage.googleapis.com/v1beta/models
-    model: gemini-1.5-flash
+    model: gemini-2.0-flash
 
 # OpenAI Moderation (kiểm duyệt nội dung tài liệu nhóm)
 # Để trống api-key → engine chỉ chạy keyword blacklist, bỏ qua tầng AI.
