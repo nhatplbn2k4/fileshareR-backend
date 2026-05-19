@@ -22,6 +22,7 @@ public class GroupLandingResponse {
     private String description;
     private GroupVisibilityType visibility;
     private String avatarUrl;
+    private String coverImageUrl;
     private String ownerName;
     private Long memberCount;
     private Boolean isMember;

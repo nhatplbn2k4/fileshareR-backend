@@ -84,4 +84,10 @@ public interface GroupService {
 
     /** Cập nhật avatar nhóm */
     void updateGroupAvatar(Long groupId, String avatarUrl);
+
+    /** Cập nhật ảnh bìa (16:9) — owner only */
+    void updateGroupCover(Long groupId, String coverImageUrl, Long userId);
+
+    /** Set ảnh bìa từ preset hệ thống — owner only */
+    GroupResponse setGroupCoverFromPreset(Long groupId, Long presetId, Long userId);
 }

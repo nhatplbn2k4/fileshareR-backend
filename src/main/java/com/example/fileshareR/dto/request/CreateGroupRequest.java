@@ -23,4 +23,10 @@ public class CreateGroupRequest {
 
     @Builder.Default
     private GroupVisibilityType visibility = GroupVisibilityType.PRIVATE;
+
+    /** Optional: id of a system preset OR custom uploaded URL via uploadCustomCover before create. */
+    private Long coverPresetId;
+
+    /** Optional: custom cover URL (already uploaded). If both set, this wins. */
+    private String coverImageUrl;
 }

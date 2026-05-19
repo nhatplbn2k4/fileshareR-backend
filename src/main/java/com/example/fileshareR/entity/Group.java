@@ -34,6 +34,9 @@ public class Group extends BaseEntity {
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
+    @Column(name = "cover_image_url", columnDefinition = "TEXT")
+    private String coverImageUrl;
+
     @Column(name = "share_token", length = 36, unique = true)
     private String shareToken;
 

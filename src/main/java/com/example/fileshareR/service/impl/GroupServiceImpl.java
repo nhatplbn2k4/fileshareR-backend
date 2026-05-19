@@ -58,6 +58,7 @@ public class GroupServiceImpl implements GroupService {
     private final com.example.fileshareR.repository.GroupFolderRepository groupFolderRepository;
     private final com.example.fileshareR.service.FileStorageService fileStorageService;
     private final com.example.fileshareR.repository.PlanRepository planRepository;
+    private final com.example.fileshareR.repository.GroupCoverPresetRepository coverPresetRepository;
     private final NotificationService notificationService;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ public class GroupServiceImpl implements GroupService {
                 .owner(owner)
                 .shareToken(UUID.randomUUID().toString())
                 .plan(planRepository.findByCode("FREE").orElse(null))
+                .coverImageUrl(resolveCoverFromRequest(request.getCoverImageUrl(), request.getCoverPresetId()))
                 .build();
         group = groupRepository.save(group);
 
@@ -122,6 +124,14 @@ public class GroupServiceImpl implements GroupService {
         }
         if (request.getAvatarUrl() != null) {
             group.setAvatarUrl(request.getAvatarUrl());
+        }
+        if (request.getCoverImageUrl() != null) {
+            group.setCoverImageUrl(request.getCoverImageUrl());
+        } else if (request.getCoverPresetId() != null) {
+            com.example.fileshareR.entity.GroupCoverPreset preset = coverPresetRepository
+                    .findById(request.getCoverPresetId())
+                    .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND, "Ảnh bìa không tồn tại"));
+            group.setCoverImageUrl(preset.getImageUrl());
         }
         if (request.getRequireApproval() != null) {
             group.setRequireApproval(request.getRequireApproval());
@@ -577,6 +587,7 @@ public class GroupServiceImpl implements GroupService {
                 .description(group.getDescription())
                 .visibility(group.getVisibility())
                 .avatarUrl(group.getAvatarUrl())
+                .coverImageUrl(group.getCoverImageUrl())
                 .ownerName(group.getOwner().getFullName())
                 .memberCount(memberCount)
                 .isMember(isMember)
@@ -851,6 +862,43 @@ public class GroupServiceImpl implements GroupService {
         log.info("Group {} avatar updated", groupId);
     }
 
+    @Override
+    public void updateGroupCover(Long groupId, String coverImageUrl, Long userId) {
+        Group group = getGroupEntityById(groupId);
+        requireOwner(group, userId);
+        group.setCoverImageUrl(coverImageUrl);
+        groupRepository.save(group);
+        log.info("Group {} cover updated by user {}", groupId, userId);
+    }
+
+    @Override
+    public GroupResponse setGroupCoverFromPreset(Long groupId, Long presetId, Long userId) {
+        Group group = getGroupEntityById(groupId);
+        requireOwner(group, userId);
+        com.example.fileshareR.entity.GroupCoverPreset preset = coverPresetRepository.findById(presetId)
+                .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND, "Ảnh bìa không tồn tại"));
+        group.setCoverImageUrl(preset.getImageUrl());
+        group = groupRepository.save(group);
+        return mapToGroupResponse(group, userId);
+    }
+
+    /** Resolve cover URL khi tạo nhóm: custom URL > preset id > random active preset. */
+    private String resolveCoverFromRequest(String customUrl, Long presetId) {
+        if (customUrl != null && !customUrl.isBlank()) {
+            return customUrl;
+        }
+        if (presetId != null) {
+            return coverPresetRepository.findById(presetId)
+                    .map(com.example.fileshareR.entity.GroupCoverPreset::getImageUrl)
+                    .orElse(null);
+        }
+        // Random pick from active presets
+        List<com.example.fileshareR.entity.GroupCoverPreset> actives =
+                coverPresetRepository.findByIsActiveTrueOrderByDisplayOrderAscIdAsc();
+        if (actives.isEmpty()) return null;
+        return actives.get(new Random().nextInt(actives.size())).getImageUrl();
+    }
+
     private GroupResponse mapToGroupResponse(Group group, Long requesterId) {
         long memberCount = groupMemberRepository.countByGroupId(group.getId());
         boolean isMember = requesterId != null
@@ -869,6 +917,7 @@ public class GroupServiceImpl implements GroupService {
                 .ownerId(group.getOwner().getId())
                 .ownerName(group.getOwner().getFullName())
                 .avatarUrl(group.getAvatarUrl())
+                .coverImageUrl(group.getCoverImageUrl())
                 .memberCount(memberCount)
                 .isMember(isMember)
                 .myRole(myRole)

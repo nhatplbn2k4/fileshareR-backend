@@ -163,6 +163,37 @@ public class GroupController {
         return ResponseEntity.ok(java.util.Map.of("avatarUrl", url));
     }
 
+    /**
+     * [AUTH, OWNER] Upload custom cover image (16:9) cho nhóm.
+     * POST /api/groups/{id}/cover/upload
+     */
+    @PostMapping("/{groupId}/cover/upload")
+    public ResponseEntity<java.util.Map<String, String>> uploadGroupCover(
+            @PathVariable Long groupId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        Long userId = getCurrentUserId();
+        groupService.getGroupEntityForUpdate(groupId, userId); // verify owner
+        String ext = file.getOriginalFilename() != null
+                ? file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf('.') + 1)
+                : "jpg";
+        String path = "covers/groups/" + groupId + "-" + System.currentTimeMillis() + "." + ext;
+        String url = avatarService.uploadAvatar(file, path);
+        groupService.updateGroupCover(groupId, url, userId);
+        return ResponseEntity.ok(java.util.Map.of("coverImageUrl", url));
+    }
+
+    /**
+     * [AUTH, OWNER] Set cover từ preset hệ thống.
+     * PATCH /api/groups/{id}/cover?presetId={id}
+     */
+    @PatchMapping("/{groupId}/cover")
+    public ResponseEntity<GroupResponse> setGroupCoverPreset(
+            @PathVariable Long groupId,
+            @RequestParam("presetId") Long presetId) {
+        Long userId = getCurrentUserId();
+        return ResponseEntity.ok(groupService.setGroupCoverFromPreset(groupId, presetId, userId));
+    }
+
     // Share group folder by token (chỉ áp dụng cho folder trong group PUBLIC)
     // ─────────────────────────────────────────────────────────────────────────
 
