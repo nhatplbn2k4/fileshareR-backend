@@ -419,7 +419,7 @@ public class DocumentServiceImpl implements DocumentService {
                     "Tài liệu được tải xuống",
                     downloaderLabel + " vừa tải tài liệu \"" + document.getTitle() + "\"",
                     document.getId(),
-                    "/documents/" + document.getId());
+                    "/documents");
         }
 
         // Lấy file
