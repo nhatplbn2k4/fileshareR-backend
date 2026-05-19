@@ -251,7 +251,7 @@ public class PlagiarismServiceImpl implements PlagiarismService {
                 notificationService.notifyUser(owner, NotificationType.SYSTEM,
                         "Tài liệu bị ẩn",
                         "Tài liệu \"" + docTitle + "\" đã bị quản trị viên đặt về chế độ riêng tư do nghi đạo văn.",
-                        doc.getId(), "/documents/" + doc.getId());
+                        doc.getId(), "/documents");
             } catch (Exception e) {
                 log.warn("Failed to notify owner after PRIVATIZE: {}", e.getMessage());
             }
