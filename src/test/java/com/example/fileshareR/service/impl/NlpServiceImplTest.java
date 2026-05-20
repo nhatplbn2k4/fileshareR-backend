@@ -223,6 +223,42 @@ class NlpServiceImplTest {
     }
 
     @Test
+    void generateSummary_periodSeparatedSentences_filtersShortOnes() {
+        // Sentences <10 chars (after trim) are skipped during scoring
+        String text = "Hi. Machine learning algorithm processing analysis data structure. "
+                + "Deep neural network classifier extraction. " // 3rd sentence
+                + "More content about clustering algorithms and statistical methods.";
+        String summary = service.generateSummary(text, 2);
+
+        assertThat(summary).isNotEmpty();
+    }
+
+    @Test
+    void calculateTfIdf_emptyTokens_returnsEmptyMap() {
+        // String with only stopwords → tokens empty after filter
+        Map<String, Double> tfidf = service.calculateTfIdf("the and a or but");
+        assertThat(tfidf).isEmpty();
+    }
+
+    @Test
+    void calculateTfIdf_numbersOnlyFiltered() {
+        Map<String, Double> tfidf = service.calculateTfIdf("123 456 alpha 789");
+        // Numbers-only tokens excluded
+        assertThat(tfidf).containsOnlyKeys("alpha");
+    }
+
+    @Test
+    void cosineSimilarity_oneTermMatchPartial_returnsCorrectValue() {
+        Map<String, Double> v1 = Map.of("a", 2.0, "b", 3.0);
+        Map<String, Double> v2 = Map.of("a", 1.0, "c", 4.0);
+
+        // dot = 2*1 = 2; |v1|=sqrt(4+9)=sqrt(13); |v2|=sqrt(1+16)=sqrt(17)
+        // = 2 / (sqrt(13)*sqrt(17)) = 2/sqrt(221) ≈ 0.1346
+        double sim = service.cosineSimilarity(v1, v2);
+        assertThat(sim).isCloseTo(0.1346, within(0.01));
+    }
+
+    @Test
     void generateSummaryWithAI_aiReturnsBlank_fallsBackToExtractive() {
         when(geminiService.summarize(anyString(), anyInt())).thenReturn("   ");
 

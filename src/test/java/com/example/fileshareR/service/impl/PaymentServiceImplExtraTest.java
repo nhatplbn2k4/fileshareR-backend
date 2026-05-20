@@ -328,6 +328,81 @@ class PaymentServiceImplExtraTest {
         assertThat(out.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
     }
 
+    // ── handleIpn applyPurchase routing for all 4 (scope × purchaseType) cells ─
+
+    @Test
+    void handleIpn_successfulUserAddonPurchase_callsBillingAddonPath() {
+        Payment p = Payment.builder().id(1L).user(user()).txnRef("T-A1")
+                .status(PaymentStatus.PENDING).amountVnd(50_000L)
+                .purchaseType(PurchaseType.ADDON).scope(PaymentScope.USER)
+                .addonCode("X10").build();
+        when(vnpayStrategy.verifyCallback(any())).thenReturn(VerificationResult.builder()
+                .signatureValid(true).success(true).txnRef("T-A1")
+                .amountVnd(50_000L).providerTxnId("VNP-A").build());
+        when(paymentRepository.findByTxnRef("T-A1")).thenReturn(Optional.of(p));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.handleIpn(PaymentProvider.VNPAY, java.util.Map.of("vnp_TxnRef", "T-A1"));
+
+        verify(billingService).purchaseUserAddon(1L, "X10");
+        verify(notificationService).notifyAllAdmins(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void handleIpn_successfulGroupPlan_routesGroupBilling() {
+        Payment p = Payment.builder().id(1L).user(user()).txnRef("T-GP")
+                .status(PaymentStatus.PENDING).amountVnd(100_000L)
+                .purchaseType(PurchaseType.PLAN).scope(PaymentScope.GROUP)
+                .groupId(20L).planCode("PRO").build();
+        when(vnpayStrategy.verifyCallback(any())).thenReturn(VerificationResult.builder()
+                .signatureValid(true).success(true).txnRef("T-GP")
+                .amountVnd(100_000L).build());
+        when(paymentRepository.findByTxnRef("T-GP")).thenReturn(Optional.of(p));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.handleIpn(PaymentProvider.VNPAY, java.util.Map.of("vnp_TxnRef", "T-GP"));
+
+        verify(billingService).purchaseGroupPlan(20L, 1L, "PRO");
+    }
+
+    @Test
+    void handleIpn_successfulGroupAddon_routesGroupBilling() {
+        Payment p = Payment.builder().id(1L).user(user()).txnRef("T-GA")
+                .status(PaymentStatus.PENDING).amountVnd(20_000L)
+                .purchaseType(PurchaseType.ADDON).scope(PaymentScope.GROUP)
+                .groupId(20L).addonCode("X10").build();
+        when(vnpayStrategy.verifyCallback(any())).thenReturn(VerificationResult.builder()
+                .signatureValid(true).success(true).txnRef("T-GA")
+                .amountVnd(20_000L).build());
+        when(paymentRepository.findByTxnRef("T-GA")).thenReturn(Optional.of(p));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.handleIpn(PaymentProvider.VNPAY, java.util.Map.of("vnp_TxnRef", "T-GA"));
+
+        verify(billingService).purchaseGroupAddon(20L, 1L, "X10");
+    }
+
+    @Test
+    void handleIpn_billingThrows_keepsPaymentSuccessButRecordsFailureReason() {
+        Payment p = Payment.builder().id(1L).user(user()).txnRef("T-X1")
+                .status(PaymentStatus.PENDING).amountVnd(100_000L)
+                .purchaseType(PurchaseType.PLAN).scope(PaymentScope.USER)
+                .planCode("PRO").build();
+        when(vnpayStrategy.verifyCallback(any())).thenReturn(VerificationResult.builder()
+                .signatureValid(true).success(true).txnRef("T-X1")
+                .amountVnd(100_000L).build());
+        when(paymentRepository.findByTxnRef("T-X1")).thenReturn(Optional.of(p));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.doThrow(new RuntimeException("billing failed"))
+                .when(billingService).purchaseUserPlan(1L, "PRO");
+
+        // No throw — apply failure logged + failureReason set, payment stays SUCCESS
+        service.handleIpn(PaymentProvider.VNPAY, java.util.Map.of("vnp_TxnRef", "T-X1"));
+
+        assertThat(p.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(p.getFailureReason()).contains("Apply purchase failed");
+    }
+
     // ── handleReturn delegation to handleIpn for PENDING ────────────────────
 
     @Test
