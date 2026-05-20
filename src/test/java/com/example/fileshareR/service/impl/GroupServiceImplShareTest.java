@@ -12,10 +12,18 @@ import com.example.fileshareR.enums.BanType;
 import com.example.fileshareR.enums.GroupMemberRole;
 import com.example.fileshareR.enums.GroupVisibilityType;
 import com.example.fileshareR.repository.GroupBanRepository;
+import com.example.fileshareR.repository.GroupJoinRequestRepository;
 import com.example.fileshareR.repository.GroupMemberRepository;
 import com.example.fileshareR.repository.GroupRepository;
+import com.example.fileshareR.repository.DocumentRepository;
+import com.example.fileshareR.repository.GroupFolderRepository;
+import com.example.fileshareR.repository.PlanRepository;
+import com.example.fileshareR.repository.GroupCoverPresetRepository;
+import com.example.fileshareR.service.FileStorageService;
 import com.example.fileshareR.service.GroupFolderService;
+import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.service.UserService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,8 +49,16 @@ class GroupServiceImplShareTest {
     @Mock private GroupRepository groupRepository;
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupBanRepository groupBanRepository;
+    @Mock private GroupJoinRequestRepository joinRequestRepository;
     @Mock private UserService userService;
     @Mock private GroupFolderService groupFolderService;
+    @Mock private ObjectMapper objectMapper;
+    @Mock private DocumentRepository documentRepository;
+    @Mock private GroupFolderRepository groupFolderRepository;
+    @Mock private FileStorageService fileStorageService;
+    @Mock private PlanRepository planRepository;
+    @Mock private GroupCoverPresetRepository coverPresetRepository;
+    @Mock private NotificationService notificationService;
 
     @InjectMocks private GroupServiceImpl groupService;
 
@@ -161,8 +177,11 @@ class GroupServiceImplShareTest {
     @Test
     void joinViaShareToken_newMember_responseIncludesShareToken() {
         when(groupRepository.findByShareToken("invite-tok")).thenReturn(Optional.of(group));
+        // 1st: gate check in joinViaShareToken returns false (not yet member).
+        // 2nd+: addMemberDirectly + mapToGroupResponse see member exists post-add.
         when(groupMemberRepository.existsByGroupIdAndUserId(100L, 2L)).thenReturn(false, true);
-        when(userService.getUserById(2L)).thenReturn(Optional.of(joiner));
+        // userService.getUserById stub omitted — addMemberDirectly short-circuits on
+        // second existsByGroupIdAndUserId=true so getUserById is never invoked.
 
         GroupResponse res = groupService.joinViaShareToken("invite-tok", 2L);
 

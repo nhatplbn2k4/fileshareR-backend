@@ -14,6 +14,7 @@ import com.example.fileshareR.repository.PlanRepository;
 import com.example.fileshareR.repository.StorageAddonRepository;
 import com.example.fileshareR.repository.UserRepository;
 import com.example.fileshareR.service.BillingService;
+import com.example.fileshareR.service.NotificationService;
 import com.example.fileshareR.service.payment.PaymentProviderStrategy;
 import com.example.fileshareR.service.payment.VerificationResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,7 @@ class PaymentServiceImplTest {
     @Mock private StorageAddonRepository addonRepository;
     @Mock private GroupRepository groupRepository;
     @Mock private BillingService billingService;
+    @Mock private NotificationService notificationService;
     @Mock private PaymentProviderStrategy vnpayStrategy;
 
     private PaymentServiceImpl service;
@@ -54,6 +56,7 @@ class PaymentServiceImplTest {
         service = new PaymentServiceImpl(
                 paymentRepository, userRepository, planRepository,
                 addonRepository, groupRepository, billingService,
+                notificationService,
                 List.of(vnpayStrategy));
     }
 
@@ -131,10 +134,11 @@ class PaymentServiceImplTest {
     }
 
     @Test
-    void handleReturn_neverAppliesPurchase() {
-        // Even if signature + result code say success, browser return must not apply —
-        // IPN owns that to survive cases where user closes browser mid-redirect.
+    void handleReturn_onTerminalPayment_isReadOnly() {
+        // When payment already reached terminal state (SUCCESS), handleReturn is
+        // read-only — never re-applies purchase. handleIpn already owned the apply.
         Payment payment = pendingUserPlanPayment("TXN4", 100_000L);
+        payment.setStatus(PaymentStatus.SUCCESS);
         when(paymentRepository.findByTxnRef("TXN4")).thenReturn(Optional.of(payment));
         when(vnpayStrategy.verifyCallback(any())).thenReturn(VerificationResult.builder()
                 .success(true).signatureValid(true).txnRef("TXN4").build());
@@ -142,8 +146,8 @@ class PaymentServiceImplTest {
         service.handleReturn(PaymentProvider.VNPAY, Map.of());
 
         verify(billingService, never()).purchaseUserPlan(any(), any());
-        // Status untouched — handleReturn is read-only
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        // Status untouched — handleReturn does not mutate when payment already terminal
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
