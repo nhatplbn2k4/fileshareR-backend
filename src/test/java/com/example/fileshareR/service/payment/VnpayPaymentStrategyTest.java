@@ -69,8 +69,8 @@ class VnpayPaymentStrategyTest {
         assertThat(url).contains("vnp_TxnRef=TEST123");
         assertThat(url).contains("vnp_SecureHash=");
         assertThat(url).contains("vnp_CurrCode=VND");
-        // OrderInfo gets URL-encoded — space → %20
-        assertThat(url).contains("vnp_OrderInfo=Thanh%20toan%20PLAN%20PREMIUM");
+        // OrderInfo gets URL-form-encoded — space → '+' (matches URLEncoder.encode default)
+        assertThat(url).contains("vnp_OrderInfo=Thanh+toan+PLAN+PREMIUM");
     }
 
     @Test
@@ -186,9 +186,9 @@ class VnpayPaymentStrategyTest {
         StringBuilder data = new StringBuilder();
         for (Map.Entry<String, String> e : sorted.entrySet()) {
             if (data.length() > 0) data.append('&');
+            // Mirror production: URLEncoder default form-encoding (' ' → '+'), no %20 substitution.
             data.append(e.getKey()).append('=')
-                    .append(java.net.URLEncoder.encode(e.getValue(), java.nio.charset.StandardCharsets.US_ASCII)
-                            .replace("+", "%20"));
+                    .append(java.net.URLEncoder.encode(e.getValue(), java.nio.charset.StandardCharsets.US_ASCII));
         }
         try {
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA512");

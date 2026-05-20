@@ -164,6 +164,62 @@
 					</excludes>
 				</configuration>
 			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.12</version>
+				<configuration>
+					<excludes>
+						<exclude>com/example/fileshareR/FileshareRApplication.class</exclude>
+						<exclude>com/example/fileshareR/config/**</exclude>
+						<exclude>com/example/fileshareR/entity/**</exclude>
+						<exclude>com/example/fileshareR/dto/**</exclude>
+						<exclude>com/example/fileshareR/mapper/**</exclude>
+						<exclude>com/example/fileshareR/exception/**</exclude>
+						<exclude>com/example/fileshareR/common/exception/**</exclude>
+						<exclude>com/example/fileshareR/enums/**</exclude>
+						<exclude>com/example/fileshareR/security/**</exclude>
+						<exclude>com/example/fileshareR/repository/**</exclude>
+						<exclude>com/example/fileshareR/controller/**</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.80</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 
