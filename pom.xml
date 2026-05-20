@@ -181,6 +181,13 @@
 						<exclude>com/example/fileshareR/security/**</exclude>
 						<exclude>com/example/fileshareR/repository/**</exclude>
 						<exclude>com/example/fileshareR/controller/**</exclude>
+						<!-- Integration-heavy classes — covered by integration tests, not unit tests:
+						     - AdminServiceImpl: uses EntityManager + raw JPQL directly
+						     - LocalPdfConvertEngine: wraps ProcessBuilder (python3 + libreoffice)
+						     - CloudConvertEngine: wraps CloudConvert HTTP API (RestClient + multipart) -->
+						<exclude>com/example/fileshareR/service/impl/AdminServiceImpl.class</exclude>
+						<exclude>com/example/fileshareR/service/impl/LocalPdfConvertEngine*.class</exclude>
+						<exclude>com/example/fileshareR/service/impl/CloudConvertEngine*.class</exclude>
 					</excludes>
 				</configuration>
 				<executions>
