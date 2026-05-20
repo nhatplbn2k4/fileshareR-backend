@@ -78,6 +78,76 @@ class GeminiServiceImplTest {
     }
 
     @Test
+    void parseGeminiResponse_validResponse_returnsText() throws Exception {
+        // Invoke private parseGeminiResponse via reflection
+        String json = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Hello world\"}]}}]}";
+        java.lang.reflect.Method m = GeminiServiceImpl.class.getDeclaredMethod(
+                "parseGeminiResponse", String.class);
+        m.setAccessible(true);
+
+        Object result = m.invoke(service, json);
+
+        assertThat(result).isEqualTo("Hello world");
+    }
+
+    @Test
+    void parseGeminiResponse_emptyCandidates_returnsNull() throws Exception {
+        String json = "{\"candidates\":[]}";
+        java.lang.reflect.Method m = GeminiServiceImpl.class.getDeclaredMethod(
+                "parseGeminiResponse", String.class);
+        m.setAccessible(true);
+
+        Object result = m.invoke(service, json);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void parseGeminiResponse_malformedJson_returnsNull() throws Exception {
+        java.lang.reflect.Method m = GeminiServiceImpl.class.getDeclaredMethod(
+                "parseGeminiResponse", String.class);
+        m.setAccessible(true);
+
+        Object result = m.invoke(service, "not json");
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void parseGeminiResponse_missingParts_returnsNull() throws Exception {
+        String json = "{\"candidates\":[{\"content\":{\"parts\":[]}}]}";
+        java.lang.reflect.Method m = GeminiServiceImpl.class.getDeclaredMethod(
+                "parseGeminiResponse", String.class);
+        m.setAccessible(true);
+
+        Object result = m.invoke(service, json);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void truncateText_underMaxChars_returnsAsIs() throws Exception {
+        java.lang.reflect.Method m = GeminiServiceImpl.class.getDeclaredMethod(
+                "truncateText", String.class, int.class);
+        m.setAccessible(true);
+
+        Object result = m.invoke(service, "short", 100);
+
+        assertThat(result).isEqualTo("short");
+    }
+
+    @Test
+    void truncateText_overMaxChars_appendsEllipsis() throws Exception {
+        java.lang.reflect.Method m = GeminiServiceImpl.class.getDeclaredMethod(
+                "truncateText", String.class, int.class);
+        m.setAccessible(true);
+
+        Object result = m.invoke(service, "long string here", 4);
+
+        assertThat(result).isEqualTo("long...");
+    }
+
+    @Test
     void generateContent_invalidApiKey_swallowsExceptionAndReturnsNull() {
         // Set a fake key — RestTemplate will hit real network and likely error
         // (timeout / 403 / DNS); the catch-Exception path returns null.

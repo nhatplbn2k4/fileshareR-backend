@@ -462,6 +462,106 @@ class DocumentServiceImplExtraTest {
         verify(documentRepository).delete(d);
     }
 
+    // ── downloadGroupDocument ───────────────────────────────────────────────
+
+    @Test
+    void downloadGroupDocument_docNotFound_throws() {
+        Group group = Group.builder().id(20L).visibility(GroupVisibilityType.PUBLIC).build();
+        when(groupRepository.findById(20L)).thenReturn(Optional.of(group));
+        when(documentRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.downloadGroupDocument(99L, 20L, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_DOCUMENT_NOT_FOUND);
+    }
+
+    @Test
+    void downloadGroupDocument_privateGroup_nonMember_throws() {
+        Group group = Group.builder().id(20L).visibility(GroupVisibilityType.PRIVATE).build();
+        when(groupRepository.findById(20L)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.existsByGroupIdAndUserId(20L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.downloadGroupDocument(1L, 20L, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_PRIVATE_ACCESS_DENIED);
+    }
+
+    @Test
+    void downloadGroupDocument_publicGroup_anyAccess(@TempDir Path tmp) throws IOException {
+        Path file = tmp.resolve("g.pdf");
+        Files.writeString(file, "data");
+        Group group = Group.builder().id(20L).visibility(GroupVisibilityType.PUBLIC).build();
+        Document d = Document.builder().id(1L).group(group).user(owner(99L))
+                .title("X")
+                .moderationStatus(ModerationStatus.APPROVED)
+                .fileUrl("g.pdf").downloadCount(0).build();
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(d));
+        when(groupRepository.findById(20L)).thenReturn(Optional.of(group));
+        when(fileStorageService.getFilePath("g.pdf")).thenReturn(file);
+
+        org.springframework.core.io.Resource r = service.downloadGroupDocument(1L, 20L, null);
+
+        assertThat(r).isNotNull();
+        assertThat(d.getDownloadCount()).isEqualTo(1);
+    }
+
+    // ── getPendingGroupDocuments ────────────────────────────────────────────
+
+    @Test
+    void getPendingGroupDocuments_admin_listsPending() {
+        Group group = Group.builder().id(20L).build();
+        Document pending = Document.builder().id(1L).user(owner(2L))
+                .group(group).title("P")
+                .moderationStatus(ModerationStatus.PENDING).build();
+        when(groupRepository.findById(20L)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndUserId(20L, 1L))
+                .thenReturn(Optional.of(GroupMember.builder().role(GroupMemberRole.OWNER).build()));
+        when(documentRepository.findByGroupIdAndModerationStatusOrderByCreatedAtDesc(
+                20L, ModerationStatus.PENDING)).thenReturn(List.of(pending));
+
+        List<DocumentResponse> out = service.getPendingGroupDocuments(20L, 1L);
+
+        assertThat(out).hasSize(1);
+    }
+
+    @Test
+    void getPendingGroupDocuments_nonAdmin_throws() {
+        Group group = Group.builder().id(20L).build();
+        when(groupRepository.findById(20L)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndUserId(20L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getPendingGroupDocuments(20L, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.MODERATION_PERMISSION_DENIED);
+    }
+
+    // ── saveDocumentToFolder additional branches ────────────────────────────
+
+    @Test
+    void saveDocumentToFolder_sourceMissing_throws() {
+        when(documentRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.saveDocumentToFolder(99L, null, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.DOCUMENT_NOT_FOUND);
+    }
+
+    @Test
+    void saveDocumentToFolder_userMissing_throws() {
+        Document source = Document.builder().id(7L).user(owner(99L)).title("T").build();
+        when(documentRepository.findById(7L)).thenReturn(Optional.of(source));
+        when(userService.getUserById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.saveDocumentToFolder(7L, null, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static User owner(Long id) {
