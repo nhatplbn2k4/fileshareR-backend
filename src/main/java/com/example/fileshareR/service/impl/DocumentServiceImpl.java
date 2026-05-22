@@ -155,12 +155,9 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
-        // Folder PUBLIC → doc tự PUBLIC theo (tránh trường hợp folder mở mà
-        // doc bên trong vẫn PRIVATE, không gợi ý/search được).
-        com.example.fileshareR.enums.VisibilityType effectiveVisibility = request.getVisibility();
-        if (folder != null && folder.getVisibility() == FolderVisibilityType.PUBLIC) {
-            effectiveVisibility = com.example.fileshareR.enums.VisibilityType.PUBLIC;
-        }
+        // Visibility theo request — user có quyền override (vd: doc PRIVATE
+        // trong folder PUBLIC). FE đã default theo folder lúc mở upload modal,
+        // backend tôn trọng giá trị FE gửi xuống.
 
         // Tạo document entity
         Document document = Document.builder()
@@ -169,7 +166,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .fileType(fileType)
                 .fileSize(fileSize)
                 .fileUrl(fileUrl)
-                .visibility(effectiveVisibility)
+                .visibility(request.getVisibility())
                 .extractedText(extractedText)
                 .keywords(keywords)
                 .summary(summary)
@@ -325,11 +322,8 @@ public class DocumentServiceImpl implements DocumentService {
             }
 
             document.setFolder(folder);
-
-            // Move vào folder PUBLIC → doc tự PUBLIC theo (mirror logic uploadDocument).
-            if (folder.getVisibility() == FolderVisibilityType.PUBLIC) {
-                document.setVisibility(com.example.fileshareR.enums.VisibilityType.PUBLIC);
-            }
+            // KHÔNG ép visibility khi move — user có quyền giữ doc PRIVATE
+            // trong folder PUBLIC. FE đã gửi visibility mong muốn xuống.
         } else {
             document.setFolder(null);
         }
