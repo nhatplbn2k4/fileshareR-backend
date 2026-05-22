@@ -61,6 +61,7 @@ import java.util.stream.Collectors;
 public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentRepository documentRepository;
+    private final com.example.fileshareR.repository.DocumentSimilarityRepository similarityRepository;
     private final FolderRepository folderRepository;
     private final UserService userService;
     private final FileStorageService fileStorageService;
@@ -647,64 +648,94 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(readOnly = true)
     public List<DocumentResponse> findSimilarDocuments(Long documentId, Long userId, int limit) {
-        log.info("Finding similar documents to {} for user {}", documentId, userId);
+        // Recommend public, approved documents related to the source document.
+        // Anonymous access supported (userId may be null) — mirrors previewDocument.
+        log.info("Finding related public documents to {} (viewer={})", documentId, userId);
 
         Document sourceDoc = documentRepository.findById(documentId)
                 .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
 
-        if (!sourceDoc.getUser().getId().equals(userId)) {
-            throw new CustomException(ErrorCode.DOCUMENT_ACCESS_DENIED);
+        // 1. Try cache first (document_similarities pre-computed at upload time).
+        List<DocumentResponse> cached = findSimilarFromCache(sourceDoc, limit);
+        if (!cached.isEmpty()) {
+            return cached;
         }
 
-        if (sourceDoc.getTfidfVector() == null) {
+        // 2. Fallback: live compute against all PUBLIC + APPROVED docs (legacy docs
+        //    uploaded before the cache mechanism, or no cached rows yet).
+        if (sourceDoc.getTfidfVector() == null || sourceDoc.getTfidfVector().isBlank()) {
             log.warn("Document {} has no TF-IDF vector", documentId);
             return Collections.emptyList();
         }
 
-        // Parse source TF-IDF vector
-        Map<String, Double> sourceVector;
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> parsed = objectMapper.readValue(sourceDoc.getTfidfVector(), Map.class);
-            sourceVector = new HashMap<>();
-            parsed.forEach((k, v) -> sourceVector.put(k, ((Number) v).doubleValue()));
-        } catch (JsonProcessingException e) {
-            log.error("Failed to parse source TF-IDF vector");
+        Map<String, Double> sourceVector = parseTfidfVector(sourceDoc.getTfidfVector());
+        if (sourceVector.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // Lấy tất cả documents của user (trừ document hiện tại)
-        List<Document> allDocs = documentRepository.findByUserId(userId);
+        List<Document> candidates = documentRepository.findByVisibilityAndModerationStatus(
+                com.example.fileshareR.enums.VisibilityType.PUBLIC,
+                ModerationStatus.APPROVED);
 
-        // Tính similarity và sắp xếp
         List<Map.Entry<Document, Double>> similarities = new ArrayList<>();
-
-        for (Document doc : allDocs) {
+        for (Document doc : candidates) {
             if (doc.getId().equals(documentId) || doc.getTfidfVector() == null) {
                 continue;
             }
-
-            try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> parsed = objectMapper.readValue(doc.getTfidfVector(), Map.class);
-                Map<String, Double> targetVector = new HashMap<>();
-                parsed.forEach((k, v) -> targetVector.put(k, ((Number) v).doubleValue()));
-
-                double similarity = nlpService.cosineSimilarity(sourceVector, targetVector);
-                if (similarity > 0.1) { // Chỉ lấy các document có độ tương đồng > 10%
-                    similarities.add(Map.entry(doc, similarity));
-                }
-            } catch (JsonProcessingException e) {
-                log.warn("Failed to parse TF-IDF for document {}", doc.getId());
+            Map<String, Double> targetVector = parseTfidfVector(doc.getTfidfVector());
+            if (targetVector.isEmpty()) {
+                continue;
+            }
+            double similarity = nlpService.cosineSimilarity(sourceVector, targetVector);
+            if (similarity > 0.1) {
+                similarities.add(Map.entry(doc, similarity));
             }
         }
 
-        // Sắp xếp theo similarity giảm dần và lấy top N
         return similarities.stream()
                 .sorted(Map.Entry.<Document, Double>comparingByValue().reversed())
                 .limit(limit)
                 .map(entry -> mapToResponse(entry.getKey()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Lấy gợi ý từ bảng document_similarities đã tính sẵn lúc upload.
+     * Truy vấn theo cả 2 chiều (doc1/doc2) — chỉ giữ tài liệu PUBLIC + APPROVED khác source.
+     */
+    private List<DocumentResponse> findSimilarFromCache(Document sourceDoc, int limit) {
+        List<com.example.fileshareR.entity.DocumentSimilarity> rows =
+                similarityRepository.findRelatedByDocumentId(sourceDoc.getId());
+        if (rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<Long> seen = new LinkedHashSet<>();
+        List<DocumentResponse> result = new ArrayList<>();
+        for (com.example.fileshareR.entity.DocumentSimilarity row : rows) {
+            Document other = row.getDocument1().getId().equals(sourceDoc.getId())
+                    ? row.getDocument2() : row.getDocument1();
+            if (other == null) continue;
+            if (other.getId().equals(sourceDoc.getId())) continue;
+            if (!seen.add(other.getId())) continue;
+            if (other.getVisibility() != com.example.fileshareR.enums.VisibilityType.PUBLIC) continue;
+            if (other.getModerationStatus() != ModerationStatus.APPROVED) continue;
+            result.add(mapToResponse(other));
+            if (result.size() >= limit) break;
+        }
+        return result;
+    }
+
+    private Map<String, Double> parseTfidfVector(String json) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = objectMapper.readValue(json, Map.class);
+            Map<String, Double> vector = new HashMap<>();
+            parsed.forEach((k, v) -> vector.put(k, ((Number) v).doubleValue()));
+            return vector;
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse TF-IDF vector: {}", e.getMessage());
+            return Collections.emptyMap();
+        }
     }
 
     private String getFileExtension(String filename) {

@@ -71,7 +71,7 @@ public class PlagiarismAdminController {
                 .map(p -> {
                     Document d = docMap.get(p.getSuspectedDocumentId());
                     List<DocumentSimilarity> sims = similarityRepository
-                            .findByDocument1IdOrderBySimilarityScoreDesc(p.getSuspectedDocumentId());
+                            .findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(p.getSuspectedDocumentId());
                     DocumentSimilarity first = sims.isEmpty() ? null : sims.get(0);
                     return PlagiarismReportSummaryResponse.builder()
                             .suspectedDocumentId(p.getSuspectedDocumentId())
@@ -97,7 +97,7 @@ public class PlagiarismAdminController {
     @GetMapping("/{docId}")
     public PlagiarismReportDetailResponse getReportDetail(@PathVariable Long docId) {
         List<DocumentSimilarity> rows = similarityRepository
-                .findByDocument1IdOrderBySimilarityScoreDesc(docId);
+                .findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(docId);
         if (rows.isEmpty()) {
             throw new CustomException(ErrorCode.BAD_REQUEST, "Không có báo cáo đạo văn cho tài liệu này.");
         }

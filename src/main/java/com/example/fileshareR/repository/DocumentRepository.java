@@ -66,6 +66,13 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     long countByUserIdAndVisibility(Long userId, VisibilityType visibility);
     List<Document> findByUserIdAndVisibility(Long userId, VisibilityType visibility);
 
+    /**
+     * Tất cả tài liệu PUBLIC đã được duyệt — dùng cho gợi ý tài liệu liên quan.
+     */
+    List<Document> findByVisibilityAndModerationStatus(
+            VisibilityType visibility,
+            ModerationStatus moderationStatus);
+
     // ── Group document queries ────────────────────────────────────────────────
 
     /** Toàn bộ tài liệu thuộc nhóm */
