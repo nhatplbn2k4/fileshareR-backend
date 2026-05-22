@@ -123,19 +123,25 @@ public class DocumentServiceImpl implements DocumentService {
         String tfidfVector = null;
 
         if (extractedText != null && !extractedText.isBlank()) {
+            // Mỗi bước NLP có try/catch riêng — AI fail KHÔNG được block TF-IDF
+            // (TF-IDF local-only, là input cho similarity/recommendation feature).
             try {
-                // Trích xuất từ khóa bằng AI (fallback to TF-IDF nếu thất bại)
                 List<String> keywordsList = nlpService.extractKeywordsWithAI(extractedText, TOP_KEYWORDS_COUNT);
                 keywords = objectMapper.writeValueAsString(keywordsList);
                 log.info("Extracted {} keywords for document", keywordsList.size());
+            } catch (Exception e) {
+                log.warn("AI keyword extraction failed: {}", e.getMessage());
+            }
 
-                // Tạo summary bằng AI (fallback to extractive nếu thất bại)
+            try {
                 summary = nlpService.generateSummaryWithAI(extractedText, SUMMARY_MAX_WORDS);
                 log.info("Generated AI summary of {} characters", summary.length());
+            } catch (Exception e) {
+                log.warn("AI summary generation failed: {}", e.getMessage());
+            }
 
-                // Tính TF-IDF vector (vẫn dùng TF-IDF cho similarity search)
+            try {
                 Map<String, Double> tfidf = nlpService.calculateTfIdf(extractedText);
-                // Chỉ lưu top 50 terms để tiết kiệm dung lượng
                 Map<String, Double> topTfidf = tfidf.entrySet().stream()
                         .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
                         .limit(50)
@@ -145,7 +151,7 @@ public class DocumentServiceImpl implements DocumentService {
                 tfidfVector = objectMapper.writeValueAsString(topTfidf);
                 log.info("Calculated TF-IDF vector with {} terms", topTfidf.size());
             } catch (Exception e) {
-                log.warn("Failed to process NLP for document: {}", e.getMessage());
+                log.warn("TF-IDF calculation failed: {}", e.getMessage());
             }
         }
 
