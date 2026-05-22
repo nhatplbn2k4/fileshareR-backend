@@ -322,11 +322,19 @@ public class FolderServiceImpl implements FolderService {
     }
 
     /**
-     * Cascade visibility từ folder gốc xuống toàn bộ cây con (BFS).
-     * - PRIVATE: clear shareToken cho tất cả
-     * - PUBLIC / LINK_ONLY: sinh shareToken mới cho folder nào chưa có
+     * Cascade visibility từ folder gốc xuống toàn bộ cây con (BFS) + cập nhật
+     * visibility của TẤT CẢ tài liệu trong các folder bị ảnh hưởng.
+     * - Folder PRIVATE: clear shareToken + doc visibility = PRIVATE
+     * - Folder PUBLIC: doc visibility = PUBLIC (để search + recommendation thấy)
+     * - Folder LINK_ONLY: shareToken giữ + doc visibility = PRIVATE
+     *   (chỉ truy cập qua link folder, không lộ trong tìm kiếm chung)
      */
     private void applyVisibilityCascade(Folder root, FolderVisibilityType newVisibility) {
+        com.example.fileshareR.enums.VisibilityType docVisibility =
+                newVisibility == FolderVisibilityType.PUBLIC
+                        ? com.example.fileshareR.enums.VisibilityType.PUBLIC
+                        : com.example.fileshareR.enums.VisibilityType.PRIVATE;
+
         Deque<Folder> queue = new ArrayDeque<>();
         queue.add(root);
         while (!queue.isEmpty()) {
@@ -338,6 +346,17 @@ public class FolderServiceImpl implements FolderService {
                 current.setShareToken(UUID.randomUUID().toString());
             }
             folderRepository.save(current);
+
+            // Cascade visibility xuống các document trong folder hiện tại
+            List<com.example.fileshareR.entity.Document> docs =
+                    documentRepository.findByFolderId(current.getId());
+            for (com.example.fileshareR.entity.Document doc : docs) {
+                if (doc.getVisibility() != docVisibility) {
+                    doc.setVisibility(docVisibility);
+                    documentRepository.save(doc);
+                }
+            }
+
             queue.addAll(folderRepository.findByParentId(current.getId()));
         }
     }
