@@ -31,8 +31,26 @@ public interface DocumentSimilarityRepository extends JpaRepository<DocumentSimi
 
     /**
      * Tất cả rows evidence của 1 report (= 1 suspected doc).
+     * Bao gồm cả các row cache (status=null) — chỉ dùng nội bộ cho gợi ý liên quan.
      */
     List<DocumentSimilarity> findByDocument1IdOrderBySimilarityScoreDesc(Long document1Id);
+
+    /**
+     * Chỉ các rows thuộc plagiarism workflow (status != null) — dùng cho admin
+     * dashboard, resolve workflow. Cache rows (status=null) sẽ bị loại để tránh
+     * lộ noise trong UI quản trị.
+     */
+    List<DocumentSimilarity> findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(Long document1Id);
+
+    /**
+     * Pre-computed similar documents cho gợi ý — query theo cả 2 chiều (doc1/doc2)
+     * vì khi A upload sau B, row chỉ có document1=A, document2=B; query với
+     * documentId=B vẫn cần thấy A.
+     */
+    @Query("SELECT ds FROM DocumentSimilarity ds " +
+           "WHERE (ds.document1.id = :documentId OR ds.document2.id = :documentId) " +
+           "ORDER BY ds.similarityScore DESC")
+    List<DocumentSimilarity> findRelatedByDocumentId(@Param("documentId") Long documentId);
 
     /**
      * Đếm số row với status nhất định cho 1 suspected doc — dedup check.

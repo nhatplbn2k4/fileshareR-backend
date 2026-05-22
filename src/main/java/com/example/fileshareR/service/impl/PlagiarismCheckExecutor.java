@@ -37,10 +37,22 @@ public class PlagiarismCheckExecutor {
     private final List<PlagiarismSourceProvider> providers;
 
     @Value("${plagiarism.similarity-threshold:0.7}")
-    private double threshold;
+    private double plagiarismThreshold;
 
     @Value("${plagiarism.max-matches:10}")
-    private int maxMatches;
+    private int maxPlagiarismMatches;
+
+    /**
+     * Ngưỡng thấp hơn để lưu CACHE độ tương đồng cho mục đích gợi ý tài liệu liên quan.
+     * Mọi cặp (suspectedDoc, matched) có score ≥ recommendationThreshold đều được lưu:
+     *   - score ≥ plagiarismThreshold → status = PENDING (workflow đạo văn — admin xem xét)
+     *   - score <  plagiarismThreshold → status = null (chỉ cache cho recommendation, không alert admin)
+     */
+    @Value("${plagiarism.recommendation-threshold:0.1}")
+    private double recommendationThreshold;
+
+    @Value("${plagiarism.recommendation-max-matches:50}")
+    private int maxRecommendationMatches;
 
     @Transactional
     public void checkDocument(Long documentId, PlagiarismTriggerType trigger, Long triggerContextId) {
@@ -50,13 +62,14 @@ public class PlagiarismCheckExecutor {
             return;
         }
 
+        // Quét với ngưỡng THẤP để lưu toàn bộ pair vào document_similarities (cache cho recommendation).
         List<PlagiarismMatch> allMatches = new ArrayList<>();
         for (PlagiarismSourceProvider p : providers) {
             if (!p.isEnabled()) continue;
             try {
-                List<PlagiarismMatch> m = p.findMatches(doc, threshold, maxMatches);
-                log.info("Plagiarism: provider '{}' returned {} matches for doc {}",
-                        p.getName(), m.size(), documentId);
+                List<PlagiarismMatch> m = p.findMatches(doc, recommendationThreshold, maxRecommendationMatches);
+                log.info("Plagiarism: provider '{}' returned {} matches for doc {} (threshold={})",
+                        p.getName(), m.size(), documentId, recommendationThreshold);
                 allMatches.addAll(m);
             } catch (Exception e) {
                 log.warn("Plagiarism: provider '{}' failed for doc {}: {}",
@@ -65,22 +78,24 @@ public class PlagiarismCheckExecutor {
         }
 
         if (allMatches.isEmpty()) {
-            log.info("Plagiarism: doc {} clean (no matches above {})", documentId, threshold);
+            log.info("Plagiarism: doc {} clean (no matches above {})", documentId, recommendationThreshold);
             return;
         }
 
         List<PlagiarismMatch> topMatches = allMatches.stream()
                 .sorted(Comparator.comparingDouble(PlagiarismMatch::similarityScore).reversed())
-                .limit(maxMatches)
+                .limit(maxRecommendationMatches)
                 .toList();
 
         boolean isNewReport = similarityRepository.countByDocument1IdAndStatus(
                 documentId, PlagiarismStatus.PENDING) == 0;
 
         double maxScore = 0;
-        int newRowCount = 0;
+        int plagiarismRowCount = 0;
+        int cacheRowCount = 0;
         for (PlagiarismMatch m : topMatches) {
             if (m.matchedDocumentId() == null) continue;
+            boolean isPlagiarismLevel = m.similarityScore() >= plagiarismThreshold;
             DocumentSimilarity existing = similarityRepository
                     .findByDocument1IdAndDocument2Id(documentId, m.matchedDocumentId())
                     .orElse(null);
@@ -93,10 +108,10 @@ public class PlagiarismCheckExecutor {
                         .similarityScore((float) m.similarityScore())
                         .triggerType(trigger)
                         .triggerContextId(triggerContextId)
-                        .status(PlagiarismStatus.PENDING)
+                        .status(isPlagiarismLevel ? PlagiarismStatus.PENDING : null)
                         .build();
                 similarityRepository.save(row);
-                newRowCount++;
+                if (isPlagiarismLevel) plagiarismRowCount++; else cacheRowCount++;
             } else {
                 PlagiarismStatus oldStatus = existing.getStatus();
                 if (oldStatus == PlagiarismStatus.RESOLVED_KEPT
@@ -110,6 +125,25 @@ public class PlagiarismCheckExecutor {
                         existing.setSimilarityScore((float) m.similarityScore());
                         similarityRepository.save(existing);
                     }
+                } else if (oldStatus == null) {
+                    // Cache row trước đó (chỉ similarity, không phải plagiarism). Cập nhật score
+                    // và nâng lên PENDING nếu score mới vượt ngưỡng plagiarism.
+                    boolean changed = false;
+                    if (existing.getSimilarityScore() == null
+                            || existing.getSimilarityScore() < m.similarityScore()) {
+                        existing.setSimilarityScore((float) m.similarityScore());
+                        changed = true;
+                    }
+                    if (isPlagiarismLevel) {
+                        existing.setStatus(PlagiarismStatus.PENDING);
+                        existing.setTriggerType(trigger);
+                        existing.setTriggerContextId(triggerContextId);
+                        plagiarismRowCount++;
+                        changed = true;
+                    }
+                    if (changed) {
+                        similarityRepository.save(existing);
+                    }
                 } else {
                     // RESOLVED_PRIVATIZED (hoặc REMOVED leak): doc đã chuyển công khai trở lại
                     // → reopen về PENDING + xóa thông tin xử lý cũ + treat as new evidence.
@@ -121,23 +155,23 @@ public class PlagiarismCheckExecutor {
                     existing.setResolvedAt(null);
                     existing.setResolutionNote(null);
                     similarityRepository.save(existing);
-                    newRowCount++;
+                    plagiarismRowCount++;
                 }
             }
             maxScore = Math.max(maxScore, m.similarityScore());
         }
 
-        log.info("Plagiarism: doc {} -> {} new rows (isNewReport={}, maxScore={})",
-                documentId, newRowCount, isNewReport, maxScore);
+        log.info("Plagiarism: doc {} -> {} plagiarism rows + {} cache rows (isNewReport={}, maxScore={})",
+                documentId, plagiarismRowCount, cacheRowCount, isNewReport, maxScore);
 
-        if (isNewReport && newRowCount > 0) {
+        if (isNewReport && plagiarismRowCount > 0) {
             String ownerEmail = doc.getUser() != null ? doc.getUser().getEmail() : "?";
             String triggerLabel = trigger == PlagiarismTriggerType.FOLDER_PUBLIC
                     ? "Folder public hóa"
                     : "Upload vào nhóm công khai";
             String message = String.format(
                     "Nghi đạo văn: \"%s\" của %s (max score %.2f, %d matches). Trigger: %s.",
-                    doc.getTitle(), ownerEmail, maxScore, newRowCount, triggerLabel);
+                    doc.getTitle(), ownerEmail, maxScore, plagiarismRowCount, triggerLabel);
             try {
                 notificationService.notifyAllAdmins(
                         NotificationType.PLAGIARISM_REPORT,

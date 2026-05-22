@@ -61,6 +61,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/users/*/profile", "/api/users/*/documents", "/api/users/*/folders").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/public-download").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/preview").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/documents/*/similar").permitAll()
 
                         // Payment provider callbacks (server-to-server + browser return — no JWT)
                         .requestMatchers("/api/payments/vnpay/return", "/api/payments/vnpay/ipn").permitAll()

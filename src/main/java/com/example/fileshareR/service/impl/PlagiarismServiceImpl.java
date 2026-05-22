@@ -128,7 +128,7 @@ public class PlagiarismServiceImpl implements PlagiarismService {
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
         List<DocumentSimilarity> rows = similarityRepository
-                .findByDocument1IdOrderBySimilarityScoreDesc(suspectedDocId);
+                .findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(suspectedDocId);
         if (rows.isEmpty()) {
             throw new CustomException(ErrorCode.BAD_REQUEST, "Không tìm thấy báo cáo đạo văn cho tài liệu này.");
         }

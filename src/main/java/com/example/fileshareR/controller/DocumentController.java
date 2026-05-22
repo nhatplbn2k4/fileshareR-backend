@@ -219,13 +219,16 @@ public class DocumentController {
     }
 
     /**
-     * Tìm các document tương tự
+     * Tìm các tài liệu PUBLIC liên quan tới tài liệu hiện tại.
+     * Cho phép anonymous (giống endpoint preview) — viewer xem qua share link
+     * tài liệu PUBLIC vẫn nhận được gợi ý.
      */
     @GetMapping("/{documentId}/similar")
     public ResponseEntity<List<DocumentResponse>> findSimilarDocuments(
             @PathVariable Long documentId,
             @RequestParam(defaultValue = "5") int limit) {
-        Long userId = getCurrentUserId();
+        Long userId;
+        try { userId = getCurrentUserId(); } catch (CustomException ignored) { userId = null; }
         List<DocumentResponse> documents = documentService.findSimilarDocuments(documentId, userId, limit);
         return ResponseEntity.ok(documents);
     }
