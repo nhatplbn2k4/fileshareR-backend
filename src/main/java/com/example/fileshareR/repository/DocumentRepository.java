@@ -24,12 +24,12 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     /**
      * Tìm kiếm tài liệu (legacy — chỉ LIKE trên title):
+     * Chỉ PUBLIC hoặc của chính user (folder PUBLIC tự đẩy doc lên PUBLIC qua
+     * uploadDocument/updateDocument, không cần check folder ở đây nữa).
      */
     @Query("SELECT d FROM Document d WHERE " +
-           "(d.visibility = 'PUBLIC' OR d.user.id = :userId " +
-           " OR (d.folder IS NOT NULL AND d.folder.visibility = 'PUBLIC')) AND " +
-           "LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%')) AND " +
-           "(d.folder IS NULL OR d.folder.visibility = 'PUBLIC' OR d.user.id = :userId)")
+           "(d.visibility = 'PUBLIC' OR d.user.id = :userId) AND " +
+           "LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Document> searchByKeyword(@Param("userId") Long userId, @Param("keyword") String keyword);
 
     /**
@@ -38,14 +38,13 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      *   - Keywords chứa keyword     → +10
      *   - Nội dung (full-text GIN)   → +1
      * Sắp xếp: relevance DESC, lượt tải DESC
-     * Quyền truy cập: PUBLIC hoặc của chính user; folder NULL/PUBLIC/owner
+     * Quyền truy cập: chỉ PUBLIC hoặc của chính user. Doc trong folder PUBLIC
+     * được uploadDocument/updateDocument set visibility=PUBLIC, không leak qua
+     * folder condition như trước.
      */
     @Query(value =
         "SELECT d.* FROM documents d " +
-        "LEFT JOIN folders f ON d.folder_id = f.id " +
-        "WHERE (d.visibility = 'PUBLIC' OR d.user_id = :userId " +
-        "       OR (d.folder_id IS NOT NULL AND f.visibility = 'PUBLIC')) " +
-        "  AND (d.folder_id IS NULL OR f.visibility = 'PUBLIC' OR d.user_id = :userId) " +
+        "WHERE (d.visibility = 'PUBLIC' OR d.user_id = :userId) " +
         "  AND ( " +
         "    LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
         "    OR LOWER(d.keywords) LIKE LOWER(CONCAT('%', :keyword, '%')) " +

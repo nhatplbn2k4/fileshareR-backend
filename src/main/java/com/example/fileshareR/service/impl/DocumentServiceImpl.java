@@ -155,6 +155,13 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
+        // Folder PUBLIC → doc tự PUBLIC theo (tránh trường hợp folder mở mà
+        // doc bên trong vẫn PRIVATE, không gợi ý/search được).
+        com.example.fileshareR.enums.VisibilityType effectiveVisibility = request.getVisibility();
+        if (folder != null && folder.getVisibility() == FolderVisibilityType.PUBLIC) {
+            effectiveVisibility = com.example.fileshareR.enums.VisibilityType.PUBLIC;
+        }
+
         // Tạo document entity
         Document document = Document.builder()
                 .title(request.getTitle())
@@ -162,7 +169,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .fileType(fileType)
                 .fileSize(fileSize)
                 .fileUrl(fileUrl)
-                .visibility(request.getVisibility())
+                .visibility(effectiveVisibility)
                 .extractedText(extractedText)
                 .keywords(keywords)
                 .summary(summary)
@@ -318,6 +325,11 @@ public class DocumentServiceImpl implements DocumentService {
             }
 
             document.setFolder(folder);
+
+            // Move vào folder PUBLIC → doc tự PUBLIC theo (mirror logic uploadDocument).
+            if (folder.getVisibility() == FolderVisibilityType.PUBLIC) {
+                document.setVisibility(com.example.fileshareR.enums.VisibilityType.PUBLIC);
+            }
         } else {
             document.setFolder(null);
         }
