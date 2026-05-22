@@ -165,7 +165,7 @@ class PlagiarismServiceImplTest {
         when(documentRepository.findById(1L)).thenReturn(Optional.of(
                 Document.builder().id(1L).title("X").user(user(2L)).build()));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.resolveReport(1L, req(Action.IGNORE, "n"), 99L))
@@ -184,7 +184,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         PlagiarismReportDetailResponse resp = service.resolveReport(1L,
@@ -206,7 +206,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.IGNORE, "ok"), 99L);
@@ -230,7 +230,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.PRIVATIZE, "hide"), 99L);
@@ -256,7 +256,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.PRIVATIZE, "x"), 99L);
@@ -274,7 +274,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
         doThrow(new RuntimeException("noti down"))
                 .when(notificationService).notifyUser(any(User.class), any(), any(), any(), any(), any());
@@ -296,7 +296,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.REMOVE, "violation"), 99L);
@@ -319,7 +319,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.REMOVE, "violation"), 99L);
@@ -340,7 +340,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.REMOVE, "v"), 99L);
@@ -356,7 +356,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
 
         service.resolveReport(1L, req(Action.REMOVE, "v"), 99L);
@@ -376,7 +376,7 @@ class PlagiarismServiceImplTest {
                 .similarityScore(0.9f).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(userRepository.findById(99L)).thenReturn(Optional.of(user(99L)));
-        when(similarityRepository.findByDocument1IdOrderBySimilarityScoreDesc(1L))
+        when(similarityRepository.findByDocument1IdAndStatusIsNotNullOrderBySimilarityScoreDesc(1L))
                 .thenReturn(List.of(row));
         doThrow(new RuntimeException("smtp"))
                 .when(notificationService).notifyUser(any(User.class), any(), any(), any(), any(), any());

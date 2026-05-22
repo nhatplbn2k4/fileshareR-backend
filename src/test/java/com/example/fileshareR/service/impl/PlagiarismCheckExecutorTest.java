@@ -47,8 +47,9 @@ class PlagiarismCheckExecutorTest {
     void setUp() {
         executor = new PlagiarismCheckExecutor(documentRepository, similarityRepository,
                 notificationService, List.of(provider));
-        ReflectionTestUtils.setField(executor, "threshold", 0.7);
-        ReflectionTestUtils.setField(executor, "maxMatches", 10);
+        ReflectionTestUtils.setField(executor, "plagiarismThreshold", 0.7);
+        ReflectionTestUtils.setField(executor, "recommendationThreshold", 0.1);
+        ReflectionTestUtils.setField(executor, "maxRecommendationMatches", 10);
     }
 
     // ── early-exit ──────────────────────────────────────────────────────────

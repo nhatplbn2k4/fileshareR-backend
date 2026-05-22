@@ -8,6 +8,7 @@ import com.example.fileshareR.dto.response.FolderResponse;
 import com.example.fileshareR.entity.Folder;
 import com.example.fileshareR.entity.User;
 import com.example.fileshareR.enums.FolderVisibilityType;
+import com.example.fileshareR.repository.DocumentRepository;
 import com.example.fileshareR.repository.FolderRepository;
 import com.example.fileshareR.service.UserService;
 import org.junit.jupiter.api.AfterEach;
@@ -37,6 +38,7 @@ import static org.mockito.Mockito.when;
 class FolderServiceImplShareTest {
 
     @Mock private FolderRepository folderRepository;
+    @Mock private DocumentRepository documentRepository;
     @Mock private UserService userService;
 
     @InjectMocks private FolderServiceImpl folderService;
@@ -52,6 +54,8 @@ class FolderServiceImplShareTest {
         lenient().when(folderRepository.save(any(Folder.class))).thenAnswer(inv -> inv.getArgument(0));
         // mặc định không có folder con
         lenient().when(folderRepository.findByParentId(anyLong())).thenReturn(Collections.emptyList());
+        // mặc định folder không chứa document — cascade visibility xuống docs no-op
+        lenient().when(documentRepository.findByFolderId(anyLong())).thenReturn(Collections.emptyList());
     }
 
     @AfterEach
