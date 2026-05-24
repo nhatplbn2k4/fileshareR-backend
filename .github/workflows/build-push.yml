@@ -51,6 +51,22 @@ jobs:
           test -s src/main/resources/filesharer-b8ff3-firebase-adminsdk-fbsvc-5f4a239563.json
           echo "Firebase JSON restored ($(wc -c < src/main/resources/filesharer-b8ff3-firebase-adminsdk-fbsvc-5f4a239563.json) bytes)"
 
+      - name: Restore GCP Vertex AI service-account JSON
+        # File gitignored (chứa GCP service account private key). Base64-encoded
+        # content nằm trong repo secret GCP_VERTEX_SA_B64. Dockerfile COPY file
+        # này vào /app/secrets/gcp-vertex-key.json + set env GOOGLE_APPLICATION_CREDENTIALS.
+        # Không có file này → Gemini summary/keyword extraction sẽ no-op (log warn).
+        env:
+          GCP_VERTEX_B64: ${{ secrets.GCP_VERTEX_SA_B64 }}
+        run: |
+          if [ -z "$GCP_VERTEX_B64" ]; then
+            echo "::error::GCP_VERTEX_SA_B64 secret is empty — Vertex AI sẽ không hoạt động"
+            exit 1
+          fi
+          echo "$GCP_VERTEX_B64" | base64 -d > gcp-vertex-key.json
+          test -s gcp-vertex-key.json
+          echo "GCP Vertex JSON restored ($(wc -c < gcp-vertex-key.json) bytes)"
+
       - name: Extract short SHA
         id: sha
         run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT

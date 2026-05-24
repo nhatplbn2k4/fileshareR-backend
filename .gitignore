@@ -48,3 +48,9 @@ uploads/
 ### Firebase service account (secret) ###
 src/main/resources/*firebase*.json
 src/main/resources/moderation/blacklist.txt
+
+### GCP Vertex AI service account key (secret) ###
+gcp-*.json
+*-vertex-key.json
+src/main/resources/*gcp*.json
+src/main/resources/*vertex*.json
