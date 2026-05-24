@@ -13,6 +13,7 @@ import com.example.fileshareR.enums.GroupMemberRole;
 import com.example.fileshareR.enums.ModerationStatus;
 import com.example.fileshareR.enums.VisibilityType;
 import com.example.fileshareR.repository.DocumentRepository;
+import com.example.fileshareR.repository.DocumentSimilarityRepository;
 import com.example.fileshareR.repository.FolderRepository;
 import com.example.fileshareR.repository.GroupBanRepository;
 import com.example.fileshareR.repository.GroupFolderRepository;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.when;
 class DocumentServiceImplTest {
 
     @Mock private DocumentRepository documentRepository;
+    @Mock private DocumentSimilarityRepository similarityRepository;
     @Mock private FolderRepository folderRepository;
     @Mock private UserService userService;
     @Mock private FileStorageService fileStorageService;
@@ -68,9 +70,9 @@ class DocumentServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new DocumentServiceImpl(
-                documentRepository, folderRepository, userService, fileStorageService,
-                textExtractionService, nlpService, objectMapper, groupRepository,
-                groupMemberRepository, groupBanRepository, groupFolderRepository,
+                documentRepository, similarityRepository, folderRepository, userService,
+                fileStorageService, textExtractionService, nlpService, objectMapper,
+                groupRepository, groupMemberRepository, groupBanRepository, groupFolderRepository,
                 storageQuotaService, contentModerationService, notificationService,
                 plagiarismServiceProvider);
     }

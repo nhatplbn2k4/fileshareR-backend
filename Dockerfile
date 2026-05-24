@@ -62,6 +62,11 @@ COPY --chown=spring:spring scripts/ /app/scripts/
 # Copy jar từ builder stage
 COPY --from=builder --chown=spring:spring /build/app.jar /app/app.jar
 
+# Copy GCP Vertex AI service account key vào /app/secrets (decoded từ workflow)
+# File này gitignored, được tạo lúc CI build bằng decode GCP_VERTEX_SA_B64 secret.
+# Vertex AI SDK đọc qua env GOOGLE_APPLICATION_CREDENTIALS (set bên dưới).
+COPY --chown=spring:spring gcp-vertex-key.json /app/secrets/gcp-vertex-key.json
+
 # Switch sang non-root user
 USER spring
 
@@ -73,6 +78,13 @@ EXPOSE 8080
 # - MaxRAMPercentage=75: dùng 75% RAM container, chừa 25% cho OS/buffer
 # - ExitOnOutOfMemoryError: crash ngay khi OOM để Docker restart kích hoạt
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
+
+# GCP Vertex AI config (project + region không phải secret, hardcode OK; key path
+# trỏ tới file COPY từ workflow build step)
+ENV GCP_PROJECT_ID="filesharer-app" \
+    GCP_VERTEX_LOCATION="us-central1" \
+    GEMINI_MODEL="gemini-2.5-flash" \
+    GOOGLE_APPLICATION_CREDENTIALS="/app/secrets/gcp-vertex-key.json"
 
 # dumb-init forward SIGTERM properly (Spring Boot graceful shutdown 30s)
 ENTRYPOINT ["dumb-init", "--"]
