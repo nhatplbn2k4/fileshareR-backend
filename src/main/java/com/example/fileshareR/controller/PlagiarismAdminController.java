@@ -130,12 +130,30 @@ public class PlagiarismAdminController {
                 .resolutionNote(first.getResolutionNote())
                 .matches(rows.stream().map(r -> {
                     Document m = r.getDocument2();
+                    // Internet plagiarism match: document2 = null nhưng có externalUrl
+                    if (m == null && r.getExternalUrl() != null) {
+                        String url = r.getExternalUrl();
+                        String host = url;
+                        try {
+                            String h = java.net.URI.create(url).getHost();
+                            if (h != null) host = h;
+                        } catch (Exception ignored) {}
+                        return PlagiarismMatchResponse.builder()
+                                .matchedDocumentId(null)
+                                .matchedTitle(host)
+                                .matchedOwnerEmail(null)
+                                .similarityScore(r.getSimilarityScore())
+                                .snippet(url)
+                                .externalUrl(url)
+                                .build();
+                    }
                     return PlagiarismMatchResponse.builder()
                             .matchedDocumentId(m != null ? m.getId() : null)
                             .matchedTitle(m != null ? m.getTitle() : "(đã xóa)")
                             .matchedOwnerEmail(m != null && m.getUser() != null ? m.getUser().getEmail() : null)
                             .similarityScore(r.getSimilarityScore())
                             .snippet(m != null ? snippet(m.getExtractedText()) : null)
+                            .externalUrl(null)
                             .build();
                 }).toList())
                 .build();

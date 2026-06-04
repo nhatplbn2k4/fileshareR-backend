@@ -144,6 +144,10 @@ plagiarism:
   providers:
     internal:
       enabled: ${PLAGIARISM_INTERNAL_ENABLED:true}
+    web-search:
+      enabled: ${PLAGIARISM_WEB_ENABLED:false}
+      api-key: ${WEB_SEARCH_API_KEY:}
+      max-queries-per-doc: ${PLAGIARISM_WEB_MAX_QUERIES:2}
 
 # Logging
 logging:

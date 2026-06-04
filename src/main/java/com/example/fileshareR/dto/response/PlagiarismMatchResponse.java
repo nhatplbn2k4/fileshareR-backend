@@ -11,4 +11,6 @@ public class PlagiarismMatchResponse {
     private String matchedOwnerEmail;
     private Float similarityScore;
     private String snippet;
+    /** Chỉ có giá trị khi match từ internet (document2 = null). */
+    private String externalUrl;
 }

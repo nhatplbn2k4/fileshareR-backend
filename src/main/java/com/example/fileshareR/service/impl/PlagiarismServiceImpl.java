@@ -324,6 +324,17 @@ public class PlagiarismServiceImpl implements PlagiarismService {
 
     private PlagiarismMatchResponse toMatchResponse(DocumentSimilarity row) {
         Document matched = row.getDocument2();
+        if (matched == null && row.getExternalUrl() != null) {
+            // Internet plagiarism match — document2 là null, trả về URL thay thế
+            return PlagiarismMatchResponse.builder()
+                    .matchedDocumentId(null)
+                    .matchedTitle(extractDomain(row.getExternalUrl()))
+                    .matchedOwnerEmail(null)
+                    .similarityScore(row.getSimilarityScore())
+                    .snippet(row.getExternalUrl())
+                    .externalUrl(row.getExternalUrl())
+                    .build();
+        }
         return PlagiarismMatchResponse.builder()
                 .matchedDocumentId(matched != null ? matched.getId() : null)
                 .matchedTitle(matched != null ? matched.getTitle() : "(đã xóa)")
@@ -331,7 +342,17 @@ public class PlagiarismServiceImpl implements PlagiarismService {
                         ? matched.getUser().getEmail() : null)
                 .similarityScore(row.getSimilarityScore())
                 .snippet(matched != null ? buildSnippet(matched.getExtractedText()) : null)
+                .externalUrl(null)
                 .build();
+    }
+
+    private String extractDomain(String url) {
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            return uri.getHost() != null ? uri.getHost() : url;
+        } catch (Exception e) {
+            return url;
+        }
     }
 
     private String buildSnippet(String text) {

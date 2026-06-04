@@ -25,9 +25,14 @@ public interface DocumentSimilarityRepository extends JpaRepository<DocumentSimi
     List<DocumentSimilarity> findSimilarDocuments(@Param("documentId") Long documentId);
 
     /**
-     * Upsert helper: kiểm tra đã có cặp (doc1, doc2) chưa.
+     * Upsert helper: kiểm tra đã có cặp (doc1, doc2) chưa — internal match.
      */
     Optional<DocumentSimilarity> findByDocument1IdAndDocument2Id(Long document1Id, Long document2Id);
+
+    /**
+     * Upsert helper: kiểm tra đã có cặp (doc1, externalUrl) chưa — internet match.
+     */
+    Optional<DocumentSimilarity> findByDocument1IdAndExternalUrl(Long document1Id, String externalUrl);
 
     /**
      * Tất cả rows evidence của 1 report (= 1 suspected doc).
