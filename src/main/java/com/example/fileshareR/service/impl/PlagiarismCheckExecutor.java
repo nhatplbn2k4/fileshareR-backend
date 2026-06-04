@@ -94,6 +94,34 @@ public class PlagiarismCheckExecutor {
         int plagiarismRowCount = 0;
         int cacheRowCount = 0;
         for (PlagiarismMatch m : topMatches) {
+            // ── Internet match (externalUrl) ──────────────────────────────────────
+            if (m.matchedDocumentId() == null && m.externalUrl() != null) {
+                boolean isPlagiarismLevel = m.similarityScore() >= plagiarismThreshold;
+                if (!isPlagiarismLevel) continue; // cache-only cho internet không lưu
+                DocumentSimilarity existing = similarityRepository
+                        .findByDocument1IdAndExternalUrl(documentId, m.externalUrl())
+                        .orElse(null);
+                if (existing == null) {
+                    DocumentSimilarity row = DocumentSimilarity.builder()
+                            .document1(doc)
+                            .document2(null)
+                            .externalUrl(m.externalUrl())
+                            .similarityScore((float) m.similarityScore())
+                            .triggerType(trigger)
+                            .triggerContextId(triggerContextId)
+                            .status(PlagiarismStatus.PENDING)
+                            .build();
+                    similarityRepository.save(row);
+                    plagiarismRowCount++;
+                } else if (existing.getSimilarityScore() == null
+                        || existing.getSimilarityScore() < m.similarityScore()) {
+                    existing.setSimilarityScore((float) m.similarityScore());
+                    similarityRepository.save(existing);
+                }
+                maxScore = Math.max(maxScore, m.similarityScore());
+                continue;
+            }
+
             if (m.matchedDocumentId() == null) continue;
             boolean isPlagiarismLevel = m.similarityScore() >= plagiarismThreshold;
             DocumentSimilarity existing = similarityRepository

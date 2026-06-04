@@ -153,16 +153,43 @@ class PlagiarismCheckExecutorTest {
     }
 
     @Test
-    void checkDocument_externalMatchOnlyNoMatchedId_skipped() {
+    void checkDocument_externalMatch_savedAsPendingRow() {
         Document suspect = Document.builder().id(1L).user(user(1L)).title("S").build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(suspect));
         when(provider.isEnabled()).thenReturn(true);
-        when(provider.getName()).thenReturn("internal");
+        when(provider.getName()).thenReturn("google-search");
         when(provider.findMatches(any(), anyDouble(), anyInt())).thenReturn(
-                List.of(new PlagiarismMatch(null, "http://example.com", "Ext", null, 0.95, null)));
+                List.of(new PlagiarismMatch(null, "http://example.com", "Ext", null, 0.95, "snippet")));
+        when(similarityRepository.countByDocument1IdAndStatus(eq(1L), eq(PlagiarismStatus.PENDING)))
+                .thenReturn(0L);
+        when(similarityRepository.findByDocument1IdAndExternalUrl(1L, "http://example.com"))
+                .thenReturn(Optional.empty());
 
         executor.checkDocument(1L, PlagiarismTriggerType.FOLDER_PUBLIC, null);
 
+        ArgumentCaptor<DocumentSimilarity> cap = ArgumentCaptor.forClass(DocumentSimilarity.class);
+        verify(similarityRepository).save(cap.capture());
+        DocumentSimilarity saved = cap.getValue();
+        assertThat(saved.getDocument1()).isEqualTo(suspect);
+        assertThat(saved.getDocument2()).isNull();
+        assertThat(saved.getExternalUrl()).isEqualTo("http://example.com");
+        assertThat(saved.getStatus()).isEqualTo(PlagiarismStatus.PENDING);
+        assertThat(saved.getSimilarityScore()).isEqualTo(0.95f);
+    }
+
+    @Test
+    void checkDocument_externalMatchBelowPlagiarismThreshold_notSaved() {
+        Document suspect = Document.builder().id(1L).user(user(1L)).title("S").build();
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(suspect));
+        when(provider.isEnabled()).thenReturn(true);
+        when(provider.getName()).thenReturn("google-search");
+        // Score 0.15 > recommendationThreshold(0.1) but < plagiarismThreshold(0.35)
+        when(provider.findMatches(any(), anyDouble(), anyInt())).thenReturn(
+                List.of(new PlagiarismMatch(null, "http://example.com", "Ext", null, 0.15, null)));
+
+        executor.checkDocument(1L, PlagiarismTriggerType.FOLDER_PUBLIC, null);
+
+        // cache-only cho internet match không lưu
         verify(similarityRepository, never()).save(any());
     }
 

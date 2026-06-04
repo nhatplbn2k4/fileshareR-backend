@@ -143,6 +143,13 @@
 			<artifactId>lucene-analysis-common</artifactId>
 			<version>9.10.0</version>
 		</dependency>
+
+		<!-- Jsoup - HTML parsing cho Google Search web plagiarism check -->
+		<dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>1.18.3</version>
+		</dependency>
 	</dependencies>
 
 	<build>

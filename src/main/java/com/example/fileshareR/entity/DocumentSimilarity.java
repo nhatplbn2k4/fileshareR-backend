@@ -10,9 +10,7 @@ import org.hibernate.annotations.OnDeleteAction;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "document_similarities", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"document_id_1", "document_id_2"})
-})
+@Table(name = "document_similarities")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -30,11 +28,15 @@ public class DocumentSimilarity {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Document document1;
 
-    /** Tài liệu gốc bị nghi đã copy (matched). */
+    /** Tài liệu gốc bị nghi đã copy (matched). Null khi match từ internet (xem externalUrl). */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "document_id_2", nullable = false)
+    @JoinColumn(name = "document_id_2", nullable = true)
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Document document2;
+
+    /** URL trang web bên ngoài — chỉ có giá trị khi document2 = null (internet plagiarism). */
+    @Column(name = "external_url", length = 2048)
+    private String externalUrl;
 
     @Column(name = "similarity_score", nullable = false)
     private Float similarityScore;
