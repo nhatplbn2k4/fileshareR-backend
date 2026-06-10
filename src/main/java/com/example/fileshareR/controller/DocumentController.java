@@ -31,6 +31,7 @@ public class DocumentController {
     private final DocumentService documentService;
     private final UserService userService;
     private final ObjectMapper objectMapper;
+    private final com.example.fileshareR.service.SearchService searchService;
 
     /**
      * Upload document mới
@@ -168,6 +169,10 @@ public class DocumentController {
     public ResponseEntity<List<DocumentResponse>> searchDocuments(@RequestParam String keyword) {
         Long userId = getCurrentUserId();
         List<DocumentResponse> documents = documentService.searchDocuments(keyword, userId);
+        // Ghi lịch sử tìm kiếm (best-effort, không chặn kết quả nếu lỗi)
+        try {
+            searchService.recordSearch(userId, keyword, documents.size());
+        } catch (Exception ignored) { /* không ảnh hưởng kết quả tìm kiếm */ }
         return ResponseEntity.ok(documents);
     }
 

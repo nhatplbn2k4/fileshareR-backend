@@ -174,7 +174,7 @@ public class DemoSeeder implements CommandLineRunner {
         List<Folder> folders = seedFolders(users);
         log.info("DemoSeeder: seeded {} folders", folders.size());
 
-        List<Group> groups = seedGroups(users, freePlan);
+        List<Group> groups = seedGroups(users);
         log.info("DemoSeeder: seeded {} groups", groups.size());
 
         seedGroupMembers(groups, users);
@@ -251,7 +251,7 @@ public class DemoSeeder implements CommandLineRunner {
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
-    private List<Group> seedGroups(List<User> users, Plan freePlan) {
+    private List<Group> seedGroups(List<User> users) {
         List<Group> created = new ArrayList<>();
         for (int i = 0; i < GROUP_COUNT; i++) {
             User owner = users.get(i); // demo01..demo07 are owners
@@ -264,7 +264,9 @@ public class DemoSeeder implements CommandLineRunner {
                     .owner(owner)
                     .shareToken(UUID.randomUUID().toString())
                     .requireApproval(vis == GroupVisibilityType.PRIVATE)
-                    .plan(freePlan)
+                    // Mô hình allocation: nhóm không có gói FREE riêng; owner cấp 50MB từ quota cá nhân
+                    .plan(null)
+                    .allocatedQuotaBytes(50L * 1024 * 1024)
                     .build();
             created.add(groupRepository.save(g));
         }

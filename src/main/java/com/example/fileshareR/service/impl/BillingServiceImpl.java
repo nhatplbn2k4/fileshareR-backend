@@ -39,6 +39,7 @@ public class BillingServiceImpl implements BillingService {
     private final GroupRepository groupRepository;
     private final UserPurchaseRepository userPurchaseRepository;
     private final GroupPurchaseRepository groupPurchaseRepository;
+    private final com.example.fileshareR.service.StorageQuotaService storageQuotaService;
 
     @Override
     @Transactional(readOnly = true)
@@ -181,12 +182,16 @@ public class BillingServiceImpl implements BillingService {
         long base = plan != null ? plan.getQuotaBytes() : 0L;
         long bonus = user.getBonusStorageBytes() != null ? user.getBonusStorageBytes() : 0L;
         long used = user.getStorageUsed() != null ? user.getStorageUsed() : 0L;
+        long allocatedToGroups = user.getId() != null
+                ? groupRepository.sumAllocatedQuotaByOwnerId(user.getId()) : 0L;
         return StorageInfoResponse.builder()
                 .plan(plan != null ? toPlanResponse(plan) : null)
                 .storageUsed(used)
                 .bonusStorageBytes(bonus)
                 .quotaBytes(base)
                 .totalQuotaBytes(base + bonus)
+                .allocatedQuotaBytes(allocatedToGroups)
+                .availableQuotaBytes(storageQuotaService.getUserAvailableQuota(user))
                 .build();
     }
 
@@ -194,13 +199,15 @@ public class BillingServiceImpl implements BillingService {
         Plan plan = group.getPlan();
         long base = plan != null ? plan.getQuotaBytes() : 0L;
         long bonus = group.getBonusStorageBytes() != null ? group.getBonusStorageBytes() : 0L;
+        long allocated = group.getAllocatedQuotaBytes() != null ? group.getAllocatedQuotaBytes() : 0L;
         long used = group.getStorageUsed() != null ? group.getStorageUsed() : 0L;
         return StorageInfoResponse.builder()
                 .plan(plan != null ? toPlanResponse(plan) : null)
                 .storageUsed(used)
                 .bonusStorageBytes(bonus)
                 .quotaBytes(base)
-                .totalQuotaBytes(base + bonus)
+                .totalQuotaBytes(base + bonus + allocated)
+                .allocatedQuotaBytes(allocated)
                 .build();
     }
 

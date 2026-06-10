@@ -55,6 +55,15 @@ public class Group extends BaseEntity {
     @Builder.Default
     private Long bonusStorageBytes = 0L;
 
+    /**
+     * Dung lượng chủ nhóm cấp phát cho nhóm, lấy ("giữ chỗ") từ quota cá nhân của owner.
+     * Đây là nguồn quota chính của nhóm — thay cho việc nhóm tự có quota FREE riêng,
+     * nhằm chặn việc tạo nhiều nhóm để lách thêm dung lượng miễn phí.
+     */
+    @Column(name = "allocated_quota_bytes", nullable = false, columnDefinition = "bigint not null default 0")
+    @Builder.Default
+    private Long allocatedQuotaBytes = 0L;
+
     @Column(name = "storage_used", nullable = false, columnDefinition = "bigint not null default 0")
     @Builder.Default
     private Long storageUsed = 0L;

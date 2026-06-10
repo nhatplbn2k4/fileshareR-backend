@@ -30,6 +30,8 @@ public class GroupResponse {
     private Boolean requireApproval;
     private List<String> joinQuestions;
     private Boolean hasPendingRequest; // user hiện tại có request PENDING không
+    private Long allocatedQuotaBytes;  // dung lượng owner cấp cho nhóm
+    private Long storageUsed;          // dung lượng nhóm đã dùng
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

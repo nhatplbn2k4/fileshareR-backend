@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class StorageQuotaServiceImplTest {
@@ -74,6 +75,42 @@ class StorageQuotaServiceImplTest {
         assertThat(service.getGroupTotalQuota(g)).isEqualTo(10_000L);
     }
 
+    @Test
+    void getGroupTotalQuota_includesAllocatedQuota() {
+        Group g = Group.builder()
+                .bonusStorageBytes(1_000L)
+                .allocatedQuotaBytes(4_000L)
+                .build();
+
+        // plan null (0) + bonus 1000 + allocated 4000
+        assertThat(service.getGroupTotalQuota(g)).isEqualTo(5_000L);
+    }
+
+    // ── getUserAvailableQuota ───────────────────────────────────────────────
+
+    @Test
+    void getUserAvailableQuota_subtractsUsedAndAllocatedToGroups() {
+        User user = User.builder().id(5L)
+                .plan(Plan.builder().quotaBytes(10_000L).build())
+                .storageUsed(2_000L)
+                .build();
+        when(groupRepository.sumAllocatedQuotaByOwnerId(5L)).thenReturn(3_000L);
+
+        // 10000 − 2000 (cá nhân) − 3000 (đã cấp cho nhóm) = 5000
+        assertThat(service.getUserAvailableQuota(user)).isEqualTo(5_000L);
+    }
+
+    @Test
+    void getUserAvailableQuota_canBeNegativeWhenOverAllocated() {
+        User user = User.builder().id(6L)
+                .plan(Plan.builder().quotaBytes(1_000L).build())
+                .storageUsed(0L)
+                .build();
+        when(groupRepository.sumAllocatedQuotaByOwnerId(6L)).thenReturn(1_500L);
+
+        assertThat(service.getUserAvailableQuota(user)).isEqualTo(-500L);
+    }
+
     // ── ensureUserCanUpload ─────────────────────────────────────────────────
 
     @Test
@@ -105,6 +142,21 @@ class StorageQuotaServiceImplTest {
                 .plan(Plan.builder().quotaBytes(1000L).build())
                 .storageUsed(900L)
                 .build();
+
+        assertThatThrownBy(() -> service.ensureUserCanUpload(user, 200L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USER_STORAGE_QUOTA_EXCEEDED);
+    }
+
+    @Test
+    void ensureUserCanUpload_quotaReservedToGroups_reducesAvailable_throws() {
+        // total 1000, chưa dùng cá nhân, nhưng đã cấp 900 cho nhóm → chỉ còn 100 khả dụng
+        User user = User.builder().id(8L)
+                .plan(Plan.builder().quotaBytes(1000L).build())
+                .storageUsed(0L)
+                .build();
+        when(groupRepository.sumAllocatedQuotaByOwnerId(8L)).thenReturn(900L);
 
         assertThatThrownBy(() -> service.ensureUserCanUpload(user, 200L))
                 .isInstanceOf(CustomException.class)

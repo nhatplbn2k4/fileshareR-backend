@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -69,6 +70,7 @@ class GroupServiceImplCoreTest {
     @Mock private PlanRepository planRepository;
     @Mock private GroupCoverPresetRepository coverPresetRepository;
     @Mock private NotificationService notificationService;
+    @Mock private com.example.fileshareR.service.StorageQuotaService storageQuotaService;
 
     private GroupServiceImpl service;
     private User owner;
@@ -79,7 +81,8 @@ class GroupServiceImplCoreTest {
         service = new GroupServiceImpl(groupRepository, groupMemberRepository,
                 groupBanRepository, joinRequestRepository, userService,
                 groupFolderService, objectMapper, documentRepository, groupFolderRepository,
-                fileStorageService, planRepository, coverPresetRepository, notificationService);
+                fileStorageService, planRepository, coverPresetRepository, notificationService,
+                storageQuotaService);
 
         owner = User.builder().id(1L).email("owner@x.com").fullName("Owner").build();
         group = Group.builder().id(100L).name("G").description("d")
@@ -94,7 +97,6 @@ class GroupServiceImplCoreTest {
     @Test
     void createGroup_persistsGroupAndOwnerMembership() {
         when(userService.getUserById(1L)).thenReturn(Optional.of(owner));
-        when(planRepository.findByCode("FREE")).thenReturn(Optional.of(Plan.builder().code("FREE").build()));
         when(groupRepository.save(any(Group.class))).thenAnswer(inv -> {
             Group g = inv.getArgument(0);
             g.setId(100L);
@@ -114,6 +116,43 @@ class GroupServiceImplCoreTest {
     }
 
     @Test
+    void createGroup_allocatesQuotaFromOwner_reservesAndSaves() {
+        when(userService.getUserById(1L)).thenReturn(Optional.of(owner));
+        when(storageQuotaService.getUserAvailableQuota(owner)).thenReturn(100L * 1024 * 1024);
+        when(groupRepository.save(any(Group.class))).thenAnswer(inv -> {
+            Group g = inv.getArgument(0);
+            g.setId(100L);
+            return g;
+        });
+
+        CreateGroupRequest req = new CreateGroupRequest();
+        req.setName("G");
+        req.setAllocatedQuotaBytes(30L * 1024 * 1024);
+
+        ArgumentCaptor<Group> cap = ArgumentCaptor.forClass(Group.class);
+        service.createGroup(req, 1L);
+
+        verify(groupRepository).save(cap.capture());
+        assertThat(cap.getValue().getAllocatedQuotaBytes()).isEqualTo(30L * 1024 * 1024);
+        assertThat(cap.getValue().getPlan()).isNull(); // không còn gói FREE riêng
+    }
+
+    @Test
+    void createGroup_allocationExceedsAvailable_throws() {
+        when(userService.getUserById(1L)).thenReturn(Optional.of(owner));
+        when(storageQuotaService.getUserAvailableQuota(owner)).thenReturn(10L * 1024 * 1024);
+
+        CreateGroupRequest req = new CreateGroupRequest();
+        req.setName("G");
+        req.setAllocatedQuotaBytes(50L * 1024 * 1024); // vượt available
+
+        assertThatThrownBy(() -> service.createGroup(req, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE);
+    }
+
+    @Test
     void createGroup_userNotFound_throws() {
         when(userService.getUserById(99L)).thenReturn(Optional.empty());
 
@@ -126,7 +165,6 @@ class GroupServiceImplCoreTest {
     @Test
     void createGroup_nullVisibility_defaultsToPrivate() {
         when(userService.getUserById(1L)).thenReturn(Optional.of(owner));
-        when(planRepository.findByCode("FREE")).thenReturn(Optional.empty());
         when(groupRepository.save(any(Group.class))).thenAnswer(inv -> inv.getArgument(0));
 
         CreateGroupRequest req = new CreateGroupRequest();
@@ -165,6 +203,38 @@ class GroupServiceImplCoreTest {
 
         assertThat(group.getVisibility()).isEqualTo(GroupVisibilityType.PRIVATE);
         verify(groupFolderService).syncShareTokensWithGroupVisibility(100L);
+    }
+
+    @Test
+    void updateGroup_reduceQuotaBelowUsed_throws() {
+        group.setStorageUsed(80L * 1024 * 1024);
+        group.setAllocatedQuotaBytes(100L * 1024 * 1024);
+        when(groupRepository.findById(100L)).thenReturn(Optional.of(group));
+
+        UpdateGroupRequest req = new UpdateGroupRequest();
+        req.setAllocatedQuotaBytes(50L * 1024 * 1024); // thấp hơn 80MB đã dùng
+
+        assertThatThrownBy(() -> service.updateGroup(100L, req, 1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_QUOTA_BELOW_USED);
+    }
+
+    @Test
+    void updateGroup_increaseQuotaWithinBudget_succeeds() {
+        group.setStorageUsed(10L * 1024 * 1024);
+        group.setAllocatedQuotaBytes(20L * 1024 * 1024);
+        when(groupRepository.findById(100L)).thenReturn(Optional.of(group));
+        when(groupRepository.save(any(Group.class))).thenAnswer(inv -> inv.getArgument(0));
+        // available của owner (đã trừ allocation hiện tại) = 100MB → budget = 100MB + 20MB cũ
+        when(storageQuotaService.getUserAvailableQuota(owner)).thenReturn(100L * 1024 * 1024);
+
+        UpdateGroupRequest req = new UpdateGroupRequest();
+        req.setAllocatedQuotaBytes(50L * 1024 * 1024);
+
+        service.updateGroup(100L, req, 1L);
+
+        assertThat(group.getAllocatedQuotaBytes()).isEqualTo(50L * 1024 * 1024);
     }
 
     @Test

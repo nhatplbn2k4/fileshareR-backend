@@ -32,6 +32,12 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
            "LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Document> searchByKeyword(@Param("userId") Long userId, @Param("keyword") String keyword);
 
+    /** Gợi ý autocomplete: tiêu đề tài liệu PUBLIC hoặc của chính user khớp prefix/substring. */
+    @Query("SELECT DISTINCT d.title FROM Document d WHERE " +
+           "(d.visibility = 'PUBLIC' OR d.user.id = :userId) AND " +
+           "LOWER(d.title) LIKE LOWER(CONCAT('%', :q, '%')) ORDER BY d.title ASC")
+    List<String> suggestTitles(@Param("userId") Long userId, @Param("q") String q, Pageable pageable);
+
     /**
      * Tìm kiếm tài liệu với xếp hạng mức độ liên quan:
      *   - Tên tài liệu chứa keyword → +100

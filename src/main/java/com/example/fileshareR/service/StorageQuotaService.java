@@ -8,7 +8,14 @@ public interface StorageQuotaService {
     /** Tổng quota của user (plan quota + bonus). */
     long getUserTotalQuota(User user);
 
-    /** Tổng quota của group (plan quota + bonus). */
+    /**
+     * Quota cá nhân còn khả dụng của user = tổng quota − đã dùng cá nhân
+     * − tổng dung lượng đã cấp phát cho các nhóm mình sở hữu.
+     * Có thể trả về số âm (khi dữ liệu cũ vượt mức); caller tự xử lý.
+     */
+    long getUserAvailableQuota(User user);
+
+    /** Tổng quota của group (plan quota + bonus + dung lượng owner cấp phát). */
     long getGroupTotalQuota(Group group);
 
     /** Throw nếu user upload sẽ vượt quota. */

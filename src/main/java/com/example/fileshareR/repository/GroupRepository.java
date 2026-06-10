@@ -25,6 +25,16 @@ public interface GroupRepository extends JpaRepository<Group, Long> {
 
     Optional<Group> findByShareToken(String shareToken);
 
+    /** Tổng dung lượng owner đã cấp phát ("giữ chỗ") cho tất cả nhóm mình sở hữu. */
+    @Query("SELECT COALESCE(SUM(g.allocatedQuotaBytes), 0) FROM Group g WHERE g.owner.id = :ownerId")
+    long sumAllocatedQuotaByOwnerId(@Param("ownerId") Long ownerId);
+
+    /** Gợi ý autocomplete: tên nhóm PUBLIC hoặc nhóm user làm chủ khớp prefix/substring. */
+    @Query("SELECT DISTINCT g.name FROM Group g WHERE " +
+           "(g.visibility = com.example.fileshareR.enums.GroupVisibilityType.PUBLIC OR g.owner.id = :userId) AND " +
+           "LOWER(g.name) LIKE LOWER(CONCAT('%', :q, '%')) ORDER BY g.name ASC")
+    List<String> suggestNames(@Param("userId") Long userId, @Param("q") String q, Pageable pageable);
+
     /**
      * Admin paged + filtered list. Search matches name + owner email.
      */

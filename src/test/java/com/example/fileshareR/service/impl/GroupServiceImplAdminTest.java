@@ -63,6 +63,7 @@ class GroupServiceImplAdminTest {
     @Mock private PlanRepository planRepository;
     @Mock private GroupCoverPresetRepository coverPresetRepository;
     @Mock private NotificationService notificationService;
+    @Mock private com.example.fileshareR.service.StorageQuotaService storageQuotaService;
 
     private GroupServiceImpl service;
     private User owner;
@@ -75,7 +76,8 @@ class GroupServiceImplAdminTest {
         service = new GroupServiceImpl(groupRepository, groupMemberRepository,
                 groupBanRepository, joinRequestRepository, userService,
                 groupFolderService, objectMapper, documentRepository, groupFolderRepository,
-                fileStorageService, planRepository, coverPresetRepository, notificationService);
+                fileStorageService, planRepository, coverPresetRepository, notificationService,
+                storageQuotaService);
 
         owner = User.builder().id(1L).fullName("Owner").email("owner@x.com").build();
         member = User.builder().id(2L).fullName("Member").email("m@x.com").build();

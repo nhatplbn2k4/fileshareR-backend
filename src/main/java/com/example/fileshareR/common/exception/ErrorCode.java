@@ -67,6 +67,8 @@ public enum ErrorCode {
     GROUP_STORAGE_QUOTA_EXCEEDED(9002, "Vượt quá dung lượng lưu trữ của nhóm. Chủ nhóm cần nâng cấp gói hoặc mua thêm bộ nhớ.", HttpStatus.BAD_REQUEST),
     PLAN_NOT_FOUND(9003, "Không tìm thấy gói lưu trữ", HttpStatus.NOT_FOUND),
     ADDON_NOT_FOUND(9004, "Không tìm thấy gói mua thêm", HttpStatus.NOT_FOUND),
+    GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE(9005, "Dung lượng cấp cho nhóm vượt quá dung lượng khả dụng của bạn.", HttpStatus.BAD_REQUEST),
+    GROUP_QUOTA_BELOW_USED(9006, "Không thể đặt dung lượng nhóm thấp hơn dung lượng nhóm đã sử dụng.", HttpStatus.BAD_REQUEST),
 
     // Convert errors
     CONVERT_PDF_ONLY(9101, "Chỉ hỗ trợ chuyển đổi từ file PDF", HttpStatus.BAD_REQUEST),

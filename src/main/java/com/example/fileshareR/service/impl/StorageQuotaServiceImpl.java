@@ -29,19 +29,30 @@ public class StorageQuotaServiceImpl implements StorageQuotaService {
     }
 
     @Override
+    public long getUserAvailableQuota(User user) {
+        long total = getUserTotalQuota(user);
+        long used = nz(user.getStorageUsed());
+        long allocated = (user.getId() != null)
+                ? groupRepository.sumAllocatedQuotaByOwnerId(user.getId())
+                : 0L;
+        return total - used - allocated;
+    }
+
+    @Override
     public long getGroupTotalQuota(Group group) {
         long base = (group.getPlan() != null) ? group.getPlan().getQuotaBytes() : 0L;
         long bonus = (group.getBonusStorageBytes() != null) ? group.getBonusStorageBytes() : 0L;
-        return base + bonus;
+        long allocated = (group.getAllocatedQuotaBytes() != null) ? group.getAllocatedQuotaBytes() : 0L;
+        return base + bonus + allocated;
     }
 
     @Override
     public void ensureUserCanUpload(User user, long fileSize) {
-        long used = nz(user.getStorageUsed());
-        long total = getUserTotalQuota(user);
-        if (used + fileSize > total) {
-            log.warn("User {} quota exceeded: used={}, file={}, total={}",
-                    user.getId(), used, fileSize, total);
+        // Dung lượng cấp cho nhóm đã "giữ chỗ" khỏi quota cá nhân nên trừ ra ở đây.
+        long available = getUserAvailableQuota(user);
+        if (fileSize > available) {
+            log.warn("User {} quota exceeded: file={}, available={}",
+                    user.getId(), fileSize, available);
             throw new CustomException(ErrorCode.USER_STORAGE_QUOTA_EXCEEDED);
         }
     }

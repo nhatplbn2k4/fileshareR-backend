@@ -1,6 +1,7 @@
 package com.example.fileshareR.dto.request;
 
 import com.example.fileshareR.enums.GroupVisibilityType;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -29,4 +30,11 @@ public class CreateGroupRequest {
 
     /** Optional: custom cover URL (already uploaded). If both set, this wins. */
     private String coverImageUrl;
+
+    /**
+     * Dung lượng (bytes) chủ nhóm cấp cho nhóm, lấy từ quota cá nhân của mình.
+     * Null/0 = nhóm chưa có dung lượng (thành viên chưa upload được cho tới khi owner cấp).
+     */
+    @Min(value = 0, message = "Dung lượng cấp cho nhóm không được âm")
+    private Long allocatedQuotaBytes;
 }

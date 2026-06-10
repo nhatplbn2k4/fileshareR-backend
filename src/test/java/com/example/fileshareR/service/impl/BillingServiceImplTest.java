@@ -41,13 +41,14 @@ class BillingServiceImplTest {
     @Mock private GroupRepository groupRepository;
     @Mock private UserPurchaseRepository userPurchaseRepository;
     @Mock private GroupPurchaseRepository groupPurchaseRepository;
+    @Mock private com.example.fileshareR.service.StorageQuotaService storageQuotaService;
 
     private BillingServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new BillingServiceImpl(planRepository, addonRepository, userRepository,
-                groupRepository, userPurchaseRepository, groupPurchaseRepository);
+                groupRepository, userPurchaseRepository, groupPurchaseRepository, storageQuotaService);
     }
 
     // ── listPlans / listAddons ──────────────────────────────────────────────

@@ -60,6 +60,7 @@ public class GroupServiceImpl implements GroupService {
     private final com.example.fileshareR.repository.PlanRepository planRepository;
     private final com.example.fileshareR.repository.GroupCoverPresetRepository coverPresetRepository;
     private final NotificationService notificationService;
+    private final com.example.fileshareR.service.StorageQuotaService storageQuotaService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // CRUD Nhóm
@@ -71,13 +72,24 @@ public class GroupServiceImpl implements GroupService {
 
         User owner = getUserById(ownerId);
 
+        // Mô hình cấp phát: dung lượng nhóm lấy từ quota cá nhân của owner (không còn quota FREE riêng).
+        long allocated = nz(request.getAllocatedQuotaBytes());
+        if (allocated < 0) {
+            throw new CustomException(ErrorCode.GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE);
+        }
+        long available = storageQuotaService.getUserAvailableQuota(owner);
+        if (allocated > available) {
+            throw new CustomException(ErrorCode.GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE);
+        }
+
         Group group = Group.builder()
                 .name(request.getName())
                 .description(request.getDescription())
                 .visibility(request.getVisibility() != null ? request.getVisibility() : GroupVisibilityType.PRIVATE)
                 .owner(owner)
                 .shareToken(UUID.randomUUID().toString())
-                .plan(planRepository.findByCode("FREE").orElse(null))
+                .plan(null) // nhóm không tự có gói FREE; dung lượng đến từ allocatedQuotaBytes
+                .allocatedQuotaBytes(allocated)
                 .coverImageUrl(resolveCoverFromRequest(request.getCoverImageUrl(), request.getCoverPresetId()))
                 .build();
         group = groupRepository.save(group);
@@ -140,6 +152,9 @@ public class GroupServiceImpl implements GroupService {
             List<String> questions = request.getJoinQuestions().stream()
                     .filter(q -> q != null && !q.isBlank()).collect(Collectors.toList());
             group.setJoinQuestion(questions.isEmpty() ? null : toJson(questions));
+        }
+        if (request.getAllocatedQuotaBytes() != null) {
+            applyAllocationChange(group, request.getAllocatedQuotaBytes());
         }
 
         group = groupRepository.save(group);
@@ -540,6 +555,33 @@ public class GroupServiceImpl implements GroupService {
         }
     }
 
+    private static long nz(Long v) {
+        return v == null ? 0L : v;
+    }
+
+    /**
+     * Đặt lại dung lượng cấp cho nhóm (mô hình allocation):
+     * - Không được thấp hơn dung lượng nhóm đã sử dụng.
+     * - Phần tăng thêm không được vượt quá dung lượng khả dụng của owner.
+     */
+    private void applyAllocationChange(Group group, long newQuota) {
+        if (newQuota < 0) {
+            throw new CustomException(ErrorCode.GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE);
+        }
+        long used = nz(group.getStorageUsed());
+        if (newQuota < used) {
+            throw new CustomException(ErrorCode.GROUP_QUOTA_BELOW_USED);
+        }
+        long oldQuota = nz(group.getAllocatedQuotaBytes());
+        // available của owner đã trừ allocation hiện tại của nhóm này → cộng lại oldQuota
+        // để có "ngân sách" tối đa có thể đặt cho nhóm.
+        long budget = storageQuotaService.getUserAvailableQuota(group.getOwner()) + oldQuota;
+        if (newQuota > budget) {
+            throw new CustomException(ErrorCode.GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE);
+        }
+        group.setAllocatedQuotaBytes(newQuota);
+    }
+
     private GroupMember requireAdminOrOwner(Long groupId, Long userId) {
         GroupMember member = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.GROUP_ACCESS_DENIED));
@@ -775,6 +817,15 @@ public class GroupServiceImpl implements GroupService {
         GroupMember oldOwnerMember = groupMemberRepository.findByGroupIdAndUserId(groupId, currentOwnerId)
                 .orElseThrow(() -> new CustomException(ErrorCode.GROUP_MEMBER_NOT_FOUND));
 
+        // Dung lượng nhóm đang "giữ chỗ" sẽ chuyển sang tính vào quota của chủ mới —
+        // chủ mới phải còn đủ dung lượng khả dụng để gánh.
+        User newOwner = getUserById(newOwnerId);
+        long allocated = nz(group.getAllocatedQuotaBytes());
+        if (allocated > storageQuotaService.getUserAvailableQuota(newOwner)) {
+            throw new CustomException(ErrorCode.GROUP_QUOTA_ALLOCATION_EXCEEDS_AVAILABLE,
+                    "Chủ nhóm mới không còn đủ dung lượng để nhận nhóm này.");
+        }
+
         // Swap roles
         newOwnerMember.setRole(GroupMemberRole.OWNER);
         oldOwnerMember.setRole(GroupMemberRole.ADMIN);
@@ -927,6 +978,8 @@ public class GroupServiceImpl implements GroupService {
                 .hasPendingRequest(requesterId != null && !isMember
                         && joinRequestRepository.existsByGroupIdAndUserIdAndStatus(
                                 group.getId(), requesterId, JoinRequestStatus.PENDING))
+                .allocatedQuotaBytes(nz(group.getAllocatedQuotaBytes()))
+                .storageUsed(nz(group.getStorageUsed()))
                 .createdAt(group.getCreatedAt())
                 .updatedAt(group.getUpdatedAt())
                 .build();

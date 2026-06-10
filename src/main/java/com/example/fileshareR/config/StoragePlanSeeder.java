@@ -36,6 +36,7 @@ public class StoragePlanSeeder implements CommandLineRunner {
         seedAddons();
         assignDefaultPlanToExisting();
         backfillStorageUsed();
+        migrateGroupsToAllocationModel();
     }
 
     private void seedPlans() {
@@ -78,15 +79,33 @@ public class StoragePlanSeeder implements CommandLineRunner {
     }
 
     private void assignDefaultPlanToExisting() {
+        // Chỉ user mới được gán gói FREE mặc định. Nhóm KHÔNG còn quota FREE riêng —
+        // dung lượng nhóm đến từ allocatedQuotaBytes (cấp từ quota cá nhân của owner).
         Plan free = planRepository.findByCode("FREE").orElseThrow();
         int u = em.createQuery("UPDATE User u SET u.plan = :p WHERE u.plan IS NULL")
                 .setParameter("p", free)
                 .executeUpdate();
-        int g = em.createQuery("UPDATE Group g SET g.plan = :p WHERE g.plan IS NULL")
-                .setParameter("p", free)
+        if (u > 0) {
+            log.info("Assigned FREE plan to {} users", u);
+        }
+    }
+
+    /**
+     * Di trú nhóm cũ sang mô hình cấp phát (allocation): gỡ gói FREE khỏi nhóm và đặt
+     * allocatedQuotaBytes = storage_used để file hiện có không bị "vượt quota", đồng thời
+     * dung lượng đó được tính ("giữ chỗ") đúng vào quota của owner.
+     * Chạy một lần — chỉ tác động nhóm còn đang gắn gói FREE.
+     */
+    private void migrateGroupsToAllocationModel() {
+        Plan free = planRepository.findByCode("FREE").orElse(null);
+        if (free == null) return;
+        int g = em.createNativeQuery(
+                "UPDATE user_groups SET allocated_quota_bytes = storage_used, plan_id = NULL " +
+                        "WHERE plan_id = :freeId")
+                .setParameter("freeId", free.getId())
                 .executeUpdate();
-        if (u > 0 || g > 0) {
-            log.info("Assigned FREE plan to {} users and {} groups", u, g);
+        if (g > 0) {
+            log.info("Migrated {} groups to allocation model (FREE plan removed)", g);
         }
     }
 
