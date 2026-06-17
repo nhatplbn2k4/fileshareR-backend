@@ -32,6 +32,12 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
            "LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Document> searchByKeyword(@Param("userId") Long userId, @Param("keyword") String keyword);
 
+    /** Gợi ý tài liệu: tài liệu PUBLIC cá nhân (không thuộc nhóm) đã duyệt, mới nhất trước. */
+    @Query("SELECT d FROM Document d WHERE d.visibility = 'PUBLIC' " +
+           "AND d.moderationStatus = com.example.fileshareR.enums.ModerationStatus.APPROVED " +
+           "AND d.group IS NULL ORDER BY d.createdAt DESC")
+    List<Document> findLatestPublic(Pageable pageable);
+
     /** Gợi ý autocomplete: tiêu đề tài liệu PUBLIC hoặc của chính user khớp prefix/substring. */
     @Query("SELECT DISTINCT d.title FROM Document d WHERE " +
            "(d.visibility = 'PUBLIC' OR d.user.id = :userId) AND " +

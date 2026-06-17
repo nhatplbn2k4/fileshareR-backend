@@ -45,6 +45,9 @@ public interface DocumentService {
     /** Tìm kiếm document theo keyword */
     List<DocumentResponse> searchDocuments(String keyword, Long userId);
 
+    /** Gợi ý: tài liệu PUBLIC mới nhất (cho trang tìm kiếm khi chưa nhập từ khóa). */
+    List<DocumentResponse> getLatestPublicDocuments(int limit);
+
     /** Phân tích document: trả về summary, keywords và TF-IDF insights */
     DocumentAnalysisResponse analyzeDocument(Long documentId, Long userId);
 

@@ -177,6 +177,16 @@ public class DocumentController {
     }
 
     /**
+     * Gợi ý: tài liệu PUBLIC mới nhất (cho trang tìm kiếm khi chưa nhập từ khóa).
+     * GET /api/documents/public/latest?limit=12
+     */
+    @GetMapping("/public/latest")
+    public ResponseEntity<List<DocumentResponse>> latestPublicDocuments(
+            @RequestParam(value = "limit", defaultValue = "12") int limit) {
+        return ResponseEntity.ok(documentService.getLatestPublicDocuments(limit));
+    }
+
+    /**
      * [PUBLIC] Download tài liệu PUBLIC (không cần auth).
      * GET /api/documents/{documentId}/public-download
      */

@@ -506,6 +506,17 @@ public class DocumentServiceImpl implements DocumentService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<DocumentResponse> getLatestPublicDocuments(int limit) {
+        int capped = Math.min(Math.max(limit, 1), 50);
+        return documentRepository
+                .findLatestPublic(org.springframework.data.domain.PageRequest.of(0, capped))
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
     private DocumentResponse mapToResponse(Document document) {
         // Parse keywords từ JSON string
         List<String> keywordsList = null;
