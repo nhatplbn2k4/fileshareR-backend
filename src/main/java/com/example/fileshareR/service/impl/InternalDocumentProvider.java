@@ -57,6 +57,13 @@ public class InternalDocumentProvider implements PlagiarismSourceProvider {
 
         Long suspectUserId = suspectedDoc.getUser() != null ? suspectedDoc.getUser().getId() : null;
 
+        // Quan hệ "lưu về": nếu suspectedDoc là bản sao thì biết tài liệu gốc + tác giả gốc.
+        Long suspectedSourceId = suspectedDoc.getSourceDocument() != null
+                ? suspectedDoc.getSourceDocument().getId() : null;
+        Long originalAuthorId = (suspectedDoc.getSourceDocument() != null
+                && suspectedDoc.getSourceDocument().getUser() != null)
+                ? suspectedDoc.getSourceDocument().getUser().getId() : null;
+
         // Quét toàn bộ docs trong hệ thống, lọc trong memory.
         // Với N nhỏ (<1k) đây là chấp nhận. Optimize sau bằng keyword pre-filter nếu cần.
         List<Document> candidates = documentRepository.findAll().stream()
@@ -66,6 +73,8 @@ public class InternalDocumentProvider implements PlagiarismSourceProvider {
                 .filter(d -> suspectUserId == null
                         || d.getUser() == null
                         || !suspectUserId.equals(d.getUser().getId()))
+                // Bỏ qua tài liệu liên quan quan hệ "lưu về" — bản sao hợp lệ KHÔNG tính đạo văn:
+                .filter(d -> !isSaveLinked(d, suspectedDoc, suspectedSourceId, originalAuthorId))
                 .toList();
 
         log.info("Plagiarism[internal]: scanning doc {} against {} candidates, threshold {}",
@@ -87,6 +96,26 @@ public class InternalDocumentProvider implements PlagiarismSourceProvider {
                 .sorted(Comparator.comparingDouble(PlagiarismMatch::similarityScore).reversed())
                 .limit(maxResults)
                 .toList();
+    }
+
+    /**
+     * Cặp (candidate, suspected) có liên kết "lưu về" → bỏ qua khi check đạo văn:
+     *   (a) candidate chính là tài liệu gốc của suspected;
+     *   (b) candidate thuộc tác giả gốc (suspected là bản sao tài liệu của họ);
+     *   (c) candidate là bản sao của suspected (chiều ngược lại);
+     *   (d) candidate và suspected là hai bản sao của cùng một gốc.
+     */
+    private boolean isSaveLinked(Document candidate, Document suspected,
+                                 Long suspectedSourceId, Long originalAuthorId) {
+        Long candSourceId = candidate.getSourceDocument() != null
+                ? candidate.getSourceDocument().getId() : null;
+        if (suspectedSourceId != null && suspectedSourceId.equals(candidate.getId())) return true;   // (a)
+        if (originalAuthorId != null && candidate.getUser() != null
+                && originalAuthorId.equals(candidate.getUser().getId())) return true;                 // (b)
+        if (candSourceId != null && candSourceId.equals(suspected.getId())) return true;              // (c)
+        if (candSourceId != null && suspectedSourceId != null
+                && candSourceId.equals(suspectedSourceId)) return true;                               // (d)
+        return false;
     }
 
     private Map<String, Double> parseVector(String json) {

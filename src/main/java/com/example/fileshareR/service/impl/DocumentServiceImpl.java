@@ -517,6 +517,19 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
+        // Nguồn gốc (bản sao "lưu về"): hiển thị tác giả gốc
+        Document src = document.getSourceDocument();
+        Long sourceDocumentId = null;
+        Long originalAuthorId = null;
+        String originalAuthorName = null;
+        if (src != null) {
+            sourceDocumentId = src.getId();
+            if (src.getUser() != null) {
+                originalAuthorId = src.getUser().getId();
+                originalAuthorName = src.getUser().getFullName();
+            }
+        }
+
         return DocumentResponse.builder()
                 .id(document.getId())
                 .title(document.getTitle())
@@ -530,6 +543,9 @@ public class DocumentServiceImpl implements DocumentService {
                 .downloadCount(document.getDownloadCount())
                 .userId(document.getUser().getId())
                 .userName(document.getUser().getFullName())
+                .sourceDocumentId(sourceDocumentId)
+                .originalAuthorId(originalAuthorId)
+                .originalAuthorName(originalAuthorName)
                 .folderId(document.getFolder() != null ? document.getFolder().getId() : null)
                 .folderName(document.getFolder() != null ? document.getFolder().getName() : null)
                 .groupId(document.getGroup() != null ? document.getGroup().getId() : null)
@@ -1078,6 +1094,12 @@ public class DocumentServiceImpl implements DocumentService {
         source.setDownloadCount(source.getDownloadCount() + 1);
         documentRepository.save(source);
 
+        // Trỏ về tài liệu GỐC: nếu source bản thân đã là bản sao thì lấy gốc của nó
+        // (flatten chuỗi sao chép) để luôn hiển thị đúng tác giả gốc.
+        Document originalSource = source.getSourceDocument() != null
+                ? source.getSourceDocument()
+                : source;
+
         Document copy = Document.builder()
                 .title(source.getTitle())
                 .fileName(source.getFileName())
@@ -1092,6 +1114,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .downloadCount(0)
                 .user(user)
                 .folder(targetFolder)
+                .sourceDocument(originalSource)
                 .build();
 
         copy = documentRepository.save(copy);

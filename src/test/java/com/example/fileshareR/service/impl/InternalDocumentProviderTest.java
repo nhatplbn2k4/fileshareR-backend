@@ -96,6 +96,53 @@ class InternalDocumentProviderTest {
     }
 
     @Test
+    void findMatches_savedCopy_skipsSourceAndOriginalAuthorDocs() {
+        // Tài liệu gốc của tác giả A (id=2, user=10)
+        Document source = Document.builder().id(2L).user(user(10L))
+                .tfidfVector("{\"foo\": 1.0}")
+                .moderationStatus(ModerationStatus.APPROVED).title("Goc cua A").build();
+        // Tài liệu khác cũng của tác giả A
+        Document authorOther = Document.builder().id(3L).user(user(10L))
+                .tfidfVector("{\"foo\": 1.0}")
+                .moderationStatus(ModerationStatus.APPROVED).title("A khac").build();
+        // Tài liệu của người khác (tác giả B)
+        Document unrelated = Document.builder().id(4L).user(user(20L))
+                .tfidfVector("{\"foo\": 1.0}")
+                .moderationStatus(ModerationStatus.APPROVED).title("Cua B")
+                .extractedText("unrelated text").build();
+        // suspected = bản sao user 99 lưu về từ source của A
+        Document suspected = Document.builder().id(1L).user(user(99L))
+                .tfidfVector("{\"foo\": 1.0}")
+                .sourceDocument(source).build();
+
+        when(documentRepository.findAll()).thenReturn(List.of(suspected, source, authorOther, unrelated));
+        when(nlpService.cosineSimilarity(any(Map.class), any(Map.class))).thenReturn(0.99);
+
+        List<PlagiarismMatch> matches = provider.findMatches(suspected, 0.5, 10);
+
+        // Chỉ tài liệu của tác giả B được tính; source + tài liệu của tác giả gốc bị bỏ qua
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0).matchedDocumentId()).isEqualTo(4L);
+    }
+
+    @Test
+    void findMatches_originalDoc_skipsItsCopies() {
+        // suspected = tài liệu gốc (id=1, user=10) đang được check
+        Document suspected = Document.builder().id(1L).user(user(10L))
+                .tfidfVector("{\"foo\": 1.0}").build();
+        // copy = bản sao của suspected do user khác lưu về (trỏ source = suspected)
+        Document copy = Document.builder().id(2L).user(user(99L))
+                .tfidfVector("{\"foo\": 1.0}")
+                .moderationStatus(ModerationStatus.APPROVED).title("Copy")
+                .sourceDocument(Document.builder().id(1L).user(user(10L)).build()).build();
+        when(documentRepository.findAll()).thenReturn(List.of(suspected, copy));
+        // copy bị lọc trước khi tính cosine → không stub cosineSimilarity
+
+        // Bản sao của chính nó không bị tính là đạo văn
+        assertThat(provider.findMatches(suspected, 0.5, 10)).isEmpty();
+    }
+
+    @Test
     void findMatches_belowThreshold_filtered() {
         Document suspected = Document.builder().id(1L).user(user(1L))
                 .tfidfVector("{\"foo\": 1.0}").build();

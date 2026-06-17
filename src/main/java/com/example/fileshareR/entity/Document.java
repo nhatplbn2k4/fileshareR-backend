@@ -96,4 +96,14 @@ public class Document extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "moderated_by_id")
     private User moderatedBy;
+
+    /**
+     * Tài liệu gốc khi đây là bản sao người dùng "lưu về" từ tài liệu của người khác.
+     * Trỏ thẳng tới gốc (root) — dùng để hiển thị tác giả gốc và bỏ qua khi
+     * check đạo văn (bản sao hợp lệ không tính là đạo văn với tài liệu của tác giả).
+     * Null nếu là tài liệu tự upload.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_document_id")
+    private Document sourceDocument;
 }

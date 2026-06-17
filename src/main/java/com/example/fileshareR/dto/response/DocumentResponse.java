@@ -31,6 +31,11 @@ public class DocumentResponse {
     private Long userId;
     private String userName;
 
+    // Nguồn gốc khi đây là bản sao "lưu về" từ tài liệu của người khác
+    private Long sourceDocumentId;     // id tài liệu gốc (null nếu tự upload)
+    private Long originalAuthorId;     // id tác giả gốc
+    private String originalAuthorName; // tên tác giả gốc
+
     // Folder info
     private Long folderId;
     private String folderName;
