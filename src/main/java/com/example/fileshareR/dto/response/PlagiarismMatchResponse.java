@@ -8,6 +8,8 @@ import lombok.Data;
 public class PlagiarismMatchResponse {
     private Long matchedDocumentId;
     private String matchedTitle;
+    private com.example.fileshareR.enums.FileType matchedFileType;
+    private String matchedFileName;
     private String matchedOwnerEmail;
     private Float similarityScore;
     private String snippet;

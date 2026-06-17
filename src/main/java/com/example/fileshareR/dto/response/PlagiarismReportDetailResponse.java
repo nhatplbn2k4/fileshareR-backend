@@ -13,6 +13,8 @@ import java.util.List;
 public class PlagiarismReportDetailResponse {
     private Long suspectedDocumentId;
     private String suspectedTitle;
+    private com.example.fileshareR.enums.FileType suspectedFileType;
+    private String suspectedFileName;
     private String suspectedOwnerEmail;
     private Integer suspectedOwnerWarningCount;
     private String suspectedSnippet;

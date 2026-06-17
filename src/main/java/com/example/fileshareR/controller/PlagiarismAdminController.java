@@ -108,6 +108,8 @@ public class PlagiarismAdminController {
         return PlagiarismReportDetailResponse.builder()
                 .suspectedDocumentId(suspected.getId())
                 .suspectedTitle(suspected.getTitle())
+                .suspectedFileType(suspected.getFileType())
+                .suspectedFileName(suspected.getFileName())
                 .suspectedOwnerEmail(suspected.getUser() != null ? suspected.getUser().getEmail() : null)
                 .suspectedOwnerWarningCount(suspected.getUser() != null
                         ? suspected.getUser().getPlagiarismWarningCount() : null)
@@ -150,6 +152,8 @@ public class PlagiarismAdminController {
                     return PlagiarismMatchResponse.builder()
                             .matchedDocumentId(m != null ? m.getId() : null)
                             .matchedTitle(m != null ? m.getTitle() : "(đã xóa)")
+                            .matchedFileType(m != null ? m.getFileType() : null)
+                            .matchedFileName(m != null ? m.getFileName() : null)
                             .matchedOwnerEmail(m != null && m.getUser() != null ? m.getUser().getEmail() : null)
                             .similarityScore(r.getSimilarityScore())
                             .snippet(m != null ? snippet(m.getExtractedText()) : null)
